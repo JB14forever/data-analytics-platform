@@ -24,7 +24,7 @@ from utils.helpers import (
 # 1. Page Config
 # ==========================================
 st.set_page_config(
-    page_title="Automated Analytics v2",
+    page_title="JB Data Explorer",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -46,10 +46,7 @@ STATE_KEYS = {
     'pipeline_stage': 'Awaiting Data',
     
     # Metadata
-    'author_name': '',
-    'project_title': 'Analytics Platform V2',
-    'project_desc': '',
-    'dataset_desc': ''
+    'author_name': ''
 }
 
 for k, v in STATE_KEYS.items():
@@ -63,10 +60,7 @@ with st.sidebar:
     st.title("⚙️ Report Configuration")
     
     # User / Report Params
-    st.session_state['project_title'] = st.text_input("Project Title", value=st.session_state['project_title'])
     st.session_state['author_name'] = st.text_input("Author Name", placeholder="e.g. Jane Doe")
-    st.session_state['project_desc'] = st.text_area("Project Description")
-    st.session_state['dataset_desc'] = st.text_input("Dataset Context target (Optional)")
     
     st.divider()
     
@@ -91,7 +85,6 @@ with st.sidebar:
             pdf_b = generate_pdf(
                 author_name=st.session_state['author_name'],
                 dataset_name=uploaded_file.name if uploaded_file else "Data",
-                project_desc=st.session_state['project_desc'],
                 domain_context=st.session_state['domain_context'],
                 cleaning_logs=st.session_state['cleaning_logs'],
                 ml_results=st.session_state['ml_results'],
@@ -169,7 +162,7 @@ if run_pipeline_btn and uploaded_file:
 # ==========================================
 # Main Dashboard UI
 # ==========================================
-st.title(st.session_state['project_title'])
+st.markdown("<h1 style='text-align: center; color: #2C3E50;'>JB Data Explorer</h1>", unsafe_allow_html=True)
 
 if st.session_state['clean_df'] is None:
     if st.session_state['raw_df'] is not None:

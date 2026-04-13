@@ -7,7 +7,6 @@ import io
 def generate_pdf(
     author_name: str, 
     dataset_name: str, 
-    project_desc: str, 
     domain_context: dict, 
     cleaning_logs: dict, 
     ml_results: dict, 
@@ -45,7 +44,7 @@ def generate_pdf(
     pdf.cell(0, 15, "Data Analytics Report", ln=True, align="C")
     
     pdf.set_font("Helvetica", "", 16)
-    pdf.cell(0, 10, project_desc if project_desc else "Automated Platform Insights", ln=True, align="C")
+    pdf.cell(0, 10, "JB Data Explorer Platform Insights", ln=True, align="C")
     pdf.ln(20)
     
     pdf.set_font("Helvetica", "B", 12)
@@ -72,16 +71,17 @@ def generate_pdf(
     # Context Block
     if domain_context:
         pdf.ln(15)
+        pdf.set_left_margin(15)
         pdf.set_x(15)
         pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, "Domain Context", ln=True, align="C")
+        pdf.cell(180, 10, "Domain Context", ln=True, align="C")
         pdf.set_font("Helvetica", "", 11)
         
         ind = str(domain_context.get('industry', 'General Business'))
-        bs = str(domain_context.get('business_summary', ''))
+        bs = str(domain_context.get('business_summary', 'None Provided')).strip()
         
-        pdf.multi_cell(0, 6, f"Industry: {ind}", align="C")
-        pdf.multi_cell(0, 6, bs, align="C")
+        pdf.multi_cell(180, 6, f"Industry: {ind}", align="C")
+        pdf.multi_cell(180, 6, bs, align="C")
 
     # ---------------------------------------------------------
     # SECTION 1: DATA CLEANING LOGS
