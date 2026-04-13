@@ -35,22 +35,29 @@ class DomainAgent:
         if not self.available:
             return self._fallback_context(schema)
             
-        system_prompt = \"\"\"
+        system_prompt = """
         You are a Principal Data Scientist advising an enterprise analytics platform.
         You will be provided with a JSON schema of a dataset and a small sample of rows.
         
         Analyze the data and output ONLY a raw JSON string matching exactly this format (no markdown tags):
         {
-            "industry": "Extracted Industry Context (e.g. Healthcare, Finance, Sports, Sales...)",
-            "target_variable": "The exact name of the column mathematically best suited to be the ML prediction target. Look for status, price, salary, churn, diagnosis, outcome. ONLY string from the schema keys.",
-            "evaluation_metric": "The best metric to evaluate this dataset's target (e.g. F1-Score, RMSE, ROC-AUC, MAE) and why (1 short sentence).",
+            "industry": "Extracted Industry Context (e.g. Healthcare, Finance...)",
+            "problem_type": "One of: Classification, Regression, Clustering, Time Series, Recommendation, NLP, Computer Vision",
+            "target_variable": "The exact name of the column mathematically best suited to be the ML prediction target.",
+            "evaluation_metrics": "Select metrics from the rule table based on the problem_type.",
             "business_summary": "A 2-sentence summary of what this dataset appears to be modeling.",
-            "suggested_queries": [
-                "Suggest 1 basic analytical natural language query",
-                "Suggest 1 advanced insight-driven natural language query"
-            ]
+            "suggested_queries": ["Suggest 1 basic query", "Suggest 1 advanced insight query"]
         }
-        \"\"\"
+        
+        RULE TABLE FOR METRICS:
+        - Classification: Accuracy, F1, ROC-AUC
+        - Regression: RMSE, MAE, R²
+        - Clustering: Silhouette Score
+        - Time Series: RMSE, MAPE
+        - Recommendation: Precision@K, Recall@K
+        - NLP: F1, BLEU
+        - Computer Vision: Accuracy, mAP
+        """
         
         user_prompt = f"SCHEMA: {json.dumps(schema)}\nSAMPLE ROWS: {json.dumps(sample_data, default=str)}"
         

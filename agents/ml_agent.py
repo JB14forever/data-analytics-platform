@@ -42,8 +42,10 @@ class MLAgent:
     def train(self, df: pd.DataFrame, target_col: str) -> dict:
         """
         Splits data, trains competing tree-based and linear algorithms, 
-        and extracts a leaderboard of the results.
+        and extracts a leaderboard of the results across multiple metrics.
         """
+        from sklearn.metrics import accuracy_score, roc_auc_score, mean_absolute_error, r2_score
+        
         task_type = self.detect_task(df, target_col)
         df_clean = df.dropna(subset=[target_col]).copy()
         
@@ -59,37 +61,47 @@ class MLAgent:
         best_model_name = ""
         best_model_obj = None
         best_metric_val = None
-        metric_name = ""
+        metric_name = "Primary Score"
         
         if task_type == 'classification':
-            metric_name = 'Weighted F1-Score'
+            metric_name = 'F1-Score'
             best_metric_val = -1.0
+            
+            # Check if binary or multiclass for ROC-AUC
+            is_binary = len(np.unique(y)) == 2
             
             models = {
                 'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
                 'XGBoost': XGBClassifier(use_label_encoder=False, eval_metric='logloss', random_state=42),
                 'Decision Tree': DecisionTreeClassifier(random_state=42),
                 'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42),
-                'Support Vector Classifier': SVC(random_state=42)
+                'Support Vector Classifier': SVC(probability=True, random_state=42)
             }
             
             for name, model in models.items():
                 try:
                     model.fit(X_train, y_train)
                     y_pred = model.predict(X_test)
-                    score = f1_score(y_test, y_pred, average='weighted', zero_division=0)
                     
-                    leaderboard.append({'Model': name, metric_name: score})
+                    acc = accuracy_score(y_test, y_pred)
+                    f1 = f1_score(y_test, y_pred, average='weighted', zero_division=0)
                     
-                    if score > best_metric_val:
-                        best_metric_val = score
+                    roc = "N/A"
+                    if is_binary and hasattr(model, "predict_proba"):
+                        y_prob = model.predict_proba(X_test)[:, 1]
+                        roc = roc_auc_score(y_test, y_prob)
+                    
+                    leaderboard.append({'Model': name, 'Accuracy': acc, 'F1-Score': f1, 'ROC-AUC': roc})
+                    
+                    if f1 > best_metric_val:
+                        best_metric_val = f1
                         best_model_name = name
                         best_model_obj = model
                 except Exception:
                     continue
                     
         else:
-            metric_name = 'Root Mean Squared Error (RMSE)'
+            metric_name = 'RMSE'
             best_metric_val = float('inf')
             
             models = {
@@ -104,22 +116,25 @@ class MLAgent:
                 try:
                     model.fit(X_train, y_train)
                     y_pred = model.predict(X_test)
-                    score = root_mean_squared_error(y_test, y_pred)
                     
-                    leaderboard.append({'Model': name, metric_name: score})
+                    rmse = root_mean_squared_error(y_test, y_pred)
+                    mae = mean_absolute_error(y_test, y_pred)
+                    r2 = r2_score(y_test, y_pred)
                     
-                    if score < best_metric_val:
-                        best_metric_val = score
+                    leaderboard.append({'Model': name, 'RMSE': rmse, 'MAE': mae, 'R²': r2})
+                    
+                    if rmse < best_metric_val:
+                        best_metric_val = rmse
                         best_model_name = name
                         best_model_obj = model
                 except Exception:
                     continue
                     
-        # Sort Leaderboard natively
+        # Sort Leaderboard natively based on the primary metric
         if task_type == 'classification':
-            leaderboard = sorted(leaderboard, key=lambda x: x[metric_name], reverse=True)
+            leaderboard = sorted(leaderboard, key=lambda x: x['F1-Score'], reverse=True)
         else:
-            leaderboard = sorted(leaderboard, key=lambda x: x[metric_name], reverse=False)
+            leaderboard = sorted(leaderboard, key=lambda x: x['RMSE'], reverse=False)
             
         feature_importance = self.get_feature_importance(best_model_obj, X.columns.tolist())
         
