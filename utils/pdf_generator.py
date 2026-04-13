@@ -72,11 +72,16 @@ def generate_pdf(
     # Context Block
     if domain_context:
         pdf.ln(15)
+        pdf.set_x(15)
         pdf.set_font("Helvetica", "B", 14)
         pdf.cell(0, 10, "Domain Context", ln=True, align="C")
         pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 6, f"Industry: {domain_context.get('industry', 'General Business')}", align="C")
-        pdf.multi_cell(0, 6, domain_context.get('business_summary', ""), align="C")
+        
+        ind = str(domain_context.get('industry', 'General Business'))
+        bs = str(domain_context.get('business_summary', ''))
+        
+        pdf.multi_cell(0, 6, f"Industry: {ind}", align="C")
+        pdf.multi_cell(0, 6, bs, align="C")
 
     # ---------------------------------------------------------
     # SECTION 1: DATA CLEANING LOGS

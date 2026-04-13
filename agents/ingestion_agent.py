@@ -19,7 +19,7 @@ class IngestionAgent:
         
         if filename.endswith(".xlsx") or filename.endswith(".xls"):
             # openpyxl handles xlsx, xlrd handles xls. We assume xlsx here.
-            df = pd.read_excel(file.getvalue())
+            df = pd.read_excel(io.BytesIO(file.getvalue()))
             return df
         else:
             # Fallback to smart CSV sniffing
