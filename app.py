@@ -46,8 +46,7 @@ def init_session_state():
         'quality_issues': [],
         'ml_results': {},
         'query_log': [],
-        'pipeline_stage': 'Awaiting Data',
-        'nlp_agent_instance': NLPAgent()
+        'pipeline_stage': 'Awaiting Data'
     }
     for key, default_val in state_keys.items():
         if key not in st.session_state:
@@ -246,7 +245,7 @@ else:
     # ------------------
     with tab4:
         st.subheader("Natural Language Querying")
-        nlp_agent = st.session_state['nlp_agent_instance']
+        nlp_agent = NLPAgent()
         
         if not nlp_agent.available:
             st.warning("⚠️ OpenAI API Key not configured. NLP features are disabled.")
