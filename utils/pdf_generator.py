@@ -5,7 +5,6 @@ from fpdf import FPDF
 import io
 
 def generate_pdf(
-    author_name: str, 
     dataset_name: str, 
     domain_context: dict, 
     cleaning_logs: dict, 
@@ -52,12 +51,6 @@ def generate_pdf(
     # Metadata Block
     left_margin = 50
     pdf.set_x(left_margin)
-    pdf.cell(40, 8, "Author:", border=0)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, author_name if author_name else "Unknown Analyst", ln=True)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_x(left_margin)
     pdf.cell(40, 8, "Dataset Name:", border=0)
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 8, dataset_name, ln=True)
@@ -87,23 +80,25 @@ def generate_pdf(
     # SECTION 1: DATA CLEANING LOGS
     # ---------------------------------------------------------
     pdf.add_page()
+    pdf.set_left_margin(15)
+    pdf.set_x(15)
     pdf.set_font("Helvetica", "B", 16)
     pdf.set_text_color(44, 62, 80)
-    pdf.cell(0, 15, "1. Data Cleaning Narrative", ln=True)
+    pdf.cell(180, 15, "1. Data Cleaning Narrative", ln=True)
     pdf.set_font("Helvetica", "", 11)
     
-    pdf.multi_cell(0, 6, "The dataset was subjected to a rigorous 12-step cleaning architecture, assessing missingness, enforcing distribution bounds via Winsorization, and filtering uninformative primary keys.")
+    pdf.multi_cell(180, 6, "The dataset was subjected to a rigorous 12-step cleaning architecture, assessing missingness, enforcing distribution bounds via Winsorization, and filtering uninformative primary keys.")
     pdf.ln(5)
     
     if cleaning_logs:
         pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(0, 8, "Variables Dropped/Filtered:", ln=True)
+        pdf.cell(180, 8, "Variables Dropped/Filtered:", ln=True)
         pdf.set_font("Helvetica", "", 10)
         for col, reason in cleaning_logs.items():
-            pdf.cell(5, 6, "-")
-            pdf.multi_cell(0, 6, f"[{col}]: {reason}")
+            # Merged hyphen into the string to avoid horizontal offset crashes
+            pdf.multi_cell(180, 6, f"- [{col}]: {reason}")
     else:
-        pdf.multi_cell(0, 6, "No severe structural anomalies were detected requiring column deletion.")
+        pdf.multi_cell(180, 6, "No severe structural anomalies were detected requiring column deletion.")
         
     pdf.ln(10)
     
@@ -111,35 +106,36 @@ def generate_pdf(
     # SECTION 2: EXPLORATORY DATA ANALYSIS
     # ---------------------------------------------------------
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "2. Exploratory Visualizations", ln=True)
+    pdf.cell(180, 10, "2. Exploratory Visualizations", ln=True)
     
     if eda_images:
         for img_bytes in eda_images:
             if img_bytes:
                 img_io = io.BytesIO(img_bytes)
-                # Ensure it fits on the page constraints nicely
                 pdf.image(img_io, w=180)
                 pdf.ln(10)
     else:
         pdf.set_font("Helvetica", "", 11)
-        pdf.cell(0, 8, "No visual distributions were selected for the report.", ln=True)
+        pdf.cell(180, 8, "No visual distributions were selected for the report.", ln=True)
         
     pdf.add_page()
+    pdf.set_left_margin(15)
+    pdf.set_x(15)
     # ---------------------------------------------------------
     # SECTION 3: MACHINE LEARNING LEADERBOARD
     # ---------------------------------------------------------
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "3. Predictive Core Results", ln=True)
+    pdf.cell(180, 10, "3. Predictive Core Results", ln=True)
     
     if ml_results.get('leaderboard'):
         pdf.set_font("Helvetica", "", 11)
         target = domain_context.get('target_variable', 'Unknown Target') if domain_context else 'Target'
         task = ml_results.get('task_type', 'N/A').title()
-        pdf.multi_cell(0, 6, f"An automated {task} sweep was conducted predicting '{target}'. The leaderboard reflects hold-out testing performance.")
+        pdf.multi_cell(180, 6, f"An automated {task} sweep was conducted predicting '{target}'. The leaderboard reflects hold-out testing performance.")
         pdf.ln(5)
         
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Model Leaderboard", ln=True)
+        pdf.cell(180, 8, "Model Leaderboard", ln=True)
         pdf.set_font("Helvetica", "B", 10)
         
         # Table Header
@@ -151,14 +147,14 @@ def generate_pdf(
         pdf.set_font("Helvetica", "", 10)
         for entry in ml_results.get('leaderboard', []):
             pdf.cell(col_w, 8, str(entry.get('Model')), border=1)
-            pdf.cell(col_w, 8, f"{entry.get(ml_results.get('metric_name'), 0):.4f}", border=1)
+            pdf.cell(col_w, 8, f"{entry.get(ml_results.get('metric_name', 'Accuracy'), 0):.4f}", border=1)
             pdf.ln()
 
         pdf.ln(10)
         
         if ml_results.get('feature_importance'):
             pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(0, 8, "Top 10 Feature Importances", ln=True)
+            pdf.cell(180, 8, "Top 10 Feature Importances", ln=True)
             pdf.set_font("Helvetica", "B", 10)
             pdf.cell(90, 8, "Feature", border=1)
             pdf.cell(90, 8, "Relative Importance", border=1)
@@ -171,7 +167,7 @@ def generate_pdf(
                 pdf.ln()
     else:
         pdf.set_font("Helvetica", "", 11)
-        pdf.cell(0, 8, "No models were computed.", ln=True)
+        pdf.cell(180, 8, "No models were computed.", ln=True)
         
     pdf.ln(10)
 
@@ -179,17 +175,17 @@ def generate_pdf(
     # SECTION 4: NLP SAVED QUERIES
     # ---------------------------------------------------------
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "4. Derived Analyst Insights", ln=True)
+    pdf.cell(180, 10, "4. Derived Analyst Insights", ln=True)
     pdf.set_font("Helvetica", "", 11)
     
     if saved_queries:
         for idx, sq in enumerate(saved_queries):
             pdf.set_font("Helvetica", "B", 11)
-            pdf.multi_cell(0, 8, f"Query {idx+1}: {sq.get('question', '')}")
+            pdf.multi_cell(180, 8, f"Query {idx+1}: {sq.get('question', '')}")
             pdf.set_font("Helvetica", "", 10)
             
             if sq.get('filter_logic'):
-                pdf.multi_cell(0, 6, f"Data Subspace Definition: {sq['filter_logic']}")
+                pdf.multi_cell(180, 6, f"Data Subspace Definition: {sq['filter_logic']}")
                 
             q_img = sq.get('image_bytes')
             if q_img:
@@ -197,7 +193,7 @@ def generate_pdf(
                 pdf.image(io.BytesIO(q_img), w=160)
             pdf.ln(10)
     else:
-        pdf.multi_cell(0, 8, "No natural language queries were attached to this report.")
+        pdf.multi_cell(180, 8, "No natural language queries were attached to this report.")
 
     try:
         return bytes(pdf.output())

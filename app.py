@@ -60,7 +60,7 @@ with st.sidebar:
     st.title("⚙️ Report Configuration")
     
     # User / Report Params
-    st.session_state['author_name'] = st.text_input("Author Name", placeholder="e.g. Jane Doe")
+    st.markdown("No active metadata inputs for now.")
     
     st.divider()
     
@@ -83,7 +83,6 @@ with st.sidebar:
         st.subheader("📥 Export Final Report")
         with st.spinner("Generating PDF Profile..."):
             pdf_b = generate_pdf(
-                author_name=st.session_state['author_name'],
                 dataset_name=uploaded_file.name if uploaded_file else "Data",
                 domain_context=st.session_state['domain_context'],
                 cleaning_logs=st.session_state['cleaning_logs'],
