@@ -171,8 +171,11 @@ if run_pipeline_btn and uploaded_file:
 # ==========================================
 st.title(st.session_state['project_title'])
 
-if st.session_state['raw_df'] is None:
-    st.info("👈 Upload your dataset and execute the pipeline to begin.")
+if st.session_state['clean_df'] is None:
+    if st.session_state['raw_df'] is not None:
+        st.warning("⚠️ The pipeline encountered an error during execution. Please check the sidebar logs.")
+    else:
+        st.info("👈 Upload your dataset and execute the pipeline to begin.")
 else:
     t1, t2, t3, t4, t5 = st.tabs(["🚀 Phase 1: Context", "🔍 Phase 2: EDA", "🤖 Phase 3: ML Modeling", "💬 Phase 4: Query Insights", "📑 Report Architect"])
     

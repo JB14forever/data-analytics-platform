@@ -34,9 +34,9 @@ class CleaningAgent:
         for col in df_clean.columns:
             if df_clean[col].dtype == 'object':
                 # Try converting to datetime first
-                sample = df_clean[col].dropna().head(20)
+                sample = df_clean[col].dropna().head(20).astype(str)
                 # Quick heuristic to avoid casting pure text to datetime arbitrarily
-                if sample.str.match(r'^\\d{4}-\\d{2}-\\d{2}|^\\d{2}/\\d{2}/\\d{4}').any():
+                if sample.str.match(r'^\d{4}-\d{2}-\d{2}|^\d{2}/\d{2}/\d{4}').any():
                     try:
                         df_clean[col] = pd.to_datetime(df_clean[col], errors='ignore')
                     except Exception:
