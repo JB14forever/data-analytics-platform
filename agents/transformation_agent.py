@@ -3,71 +3,57 @@
 import pandas as pd
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 
-
 class TransformationAgent:
     """
     Transforms clean data into a format optimal for Machine Learning.
-    Includes feature scaling and categorical encoding.
+    Step 10 & 11: Encoding and Feature Scaling.
     """
 
-    def encode(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
+    def handle_datetime_features(self, df: pd.DataFrame, schema: dict) -> tuple[pd.DataFrame, list]:
         """
-        Encodes categorical and boolean variables into numerical formats.
+        Extracts temporal features from datetimes and drops the original fields
+        since ML models cannot digest raw datetime64 objects directly.
+        """
+        df_feat = df.copy()
+        dt_cols = [c for c in schema if schema[c]['dtype'] == 'datetime']
+        dropped = []
         
-        Args:
-            df (pd.DataFrame): Cleaned dataset.
-            schema (dict): Schema dictionary for identifying column contexts.
-            
-        Returns:
-            pd.DataFrame: Dataset with encoded nominal/categorical features.
-            
-        Design Decision:
-            - **Low Cardinality (<=10)**: Uses One-Hot Encoding (pd.get_dummies).
-              Creating a column per category creates independence but expands dimensions.
-            - **High Cardinality (>10)**: Uses Label Encoding. We avoid OHE for highly 
-              variant categoricals to prevent the "Curse of Dimensionality" (feature space 
-              explosion leading to sparsity and model overfitting).
-        """
+        for col in dt_cols:
+            if col in df_feat.columns:
+                df_feat[f"{col}_year"] = df_feat[col].dt.year
+                df_feat[f"{col}_month"] = df_feat[col].dt.month
+                df_feat[f"{col}_day"] = df_feat[col].dt.day
+                # After extracting numerics, toss original
+                df_feat = df_feat.drop(columns=[col])
+                dropped.append(col)
+                
+        return df_feat, dropped
+
+    def encode(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
         df_encoded = df.copy()
         
         for col, meta in schema.items():
+            if col not in df_encoded.columns:
+                continue
+                
             if meta['dtype'] == 'categorical':
                 if meta['cardinality'] <= 10:
-                    # One Hot Encoding
                     df_encoded = pd.get_dummies(df_encoded, columns=[col], drop_first=True)
                 else:
-                    # Label Encoding
                     le = LabelEncoder()
                     df_encoded[col] = le.fit_transform(df_encoded[col].astype(str))
                     
             elif meta['dtype'] == 'boolean':
-                # Map booleans to integers
                 df_encoded[col] = df_encoded[col].astype(int)
                 
         return df_encoded
 
     def scale(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
-        """
-        Normalizes numeric columns to have a mean of 0 and std deviation of 1.
-        
-        Args:
-            df (pd.DataFrame): Encoded dataset.
-            schema (dict): Original schema dict.
-            
-        Returns:
-            pd.DataFrame: Dataset with scaled numeric columns.
-            
-        Mathematical Rationale (Z-Score Normalization):
-            Z = (X - μ) / σ
-            Where μ is the mean and σ is the standard deviation.
-            Scaling prevents variables with inherently larger magnitudes (e.g., salary vs age) 
-            from dominating variance calculations or gradient descents in ML loss functions.
-        """
         df_scaled = df.copy()
         
-        # Identify columns that are purely numeric (this includes original numeric and label encoded)
-        # OHE columns will be uint8 or bool in pandas, which is generally fine to scale or ignore.
-        # We will scale purely numeric continuous variables originally indicated in schema.
+        # We only strictly scale original base numeric variables. 
+        # OHE and encoded labels often shouldn't be scaled, but StandardScaling them 
+        # isn't universally harmful for Trees/LinReg. To be precise, scale all purely continous:
         numeric_cols = [c for c in df_scaled.columns if c in schema and schema[c]['dtype'] == 'numeric']
         
         if numeric_cols:
@@ -78,19 +64,15 @@ class TransformationAgent:
 
     def transform(self, df: pd.DataFrame, schema: dict) -> pd.DataFrame:
         """
-        Orchestrates transformation sequence.
-        
-        Sequence:
-        1. Encode categorical/boolean features to numerical representations.
-        2. Scale numeric columns for un-biased magnitude modeling.
-        
-        Args:
-            df (pd.DataFrame): Cleaned DataFrame.
-            schema (dict): Schema metadata.
-            
-        Returns:
-            pd.DataFrame: Fully formatted model-ready DataFrame.
+        Orchestrates step 10 & 11 transformation sequence.
         """
-        df_encoded = self.encode(df, schema)
+        # 1. Parse Datetimes to int features
+        df_dt, dt_drops = self.handle_datetime_features(df, schema)
+        
+        # 2. Encode
+        df_encoded = self.encode(df_dt, schema)
+        
+        # 3. Scale
         df_scaled = self.scale(df_encoded, schema)
+        
         return df_scaled

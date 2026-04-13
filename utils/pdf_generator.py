@@ -2,163 +2,199 @@
 
 import datetime
 from fpdf import FPDF
+import io
 
-
-def generate_pdf(project_name: str, summary_stats: dict, health_score: float, schema: dict, ml_results: dict, query_log: list) -> bytes:
+def generate_pdf(
+    author_name: str, 
+    dataset_name: str, 
+    project_desc: str, 
+    domain_context: dict, 
+    cleaning_logs: dict, 
+    ml_results: dict, 
+    eda_images: list, 
+    saved_queries: list
+) -> bytes:
     """
-    Generates an executive summary PDF of the data analytics pipeline.
-    
-    Args:
-        project_name (str): The name of the project.
-        summary_stats (dict): General metrics like row/col count and null %.
-        health_score (float): Calculated health score.
-        schema (dict): Column schema definitions.
-        ml_results (dict): Results from ML Agent.
-        query_log (list): Log of NLP queries.
-        
-    Returns:
-        bytes: The raw byte content of the generated PDF.
+    Generates a highly structured, standard A4 PDF analytics report.
     """
     class PDF(FPDF):
         def header(self):
-            self.set_font("Helvetica", "B", 12)
-            self.cell(0, 10, f"{project_name} - Analytics Report", border=False, align="C")
-            self.ln(10)
+            # No header on first page
+            if self.page_no() > 1:
+                self.set_font("Helvetica", "I", 8)
+                self.set_text_color(150, 150, 150)
+                self.cell(0, 10, f"{dataset_name} Analytics Report", border=False, align="R")
+                self.ln(10)
             
         def footer(self):
             self.set_y(-15)
             self.set_font("Helvetica", "I", 8)
+            self.set_text_color(150, 150, 150)
             self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # Title Page section
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.cell(0, 20, "Data Analytics Report", ln=True, align="C")
+    # ---------------------------------------------------------
+    # TITLE PAGE
+    # ---------------------------------------------------------
+    pdf.set_y(60)
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_text_color(44, 62, 80)
+    pdf.cell(0, 15, "Data Analytics Report", ln=True, align="C")
+    
+    pdf.set_font("Helvetica", "", 16)
+    pdf.cell(0, 10, project_desc if project_desc else "Automated Platform Insights", ln=True, align="C")
+    pdf.ln(20)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_text_color(52, 73, 94)
+    # Metadata Block
+    left_margin = 50
+    pdf.set_x(left_margin)
+    pdf.cell(40, 8, "Author:", border=0)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 10, f"Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align="C")
-    pdf.cell(0, 10, "Automated Agent-Based Analytics Platform", ln=True, align="C")
-    pdf.ln(15)
+    pdf.cell(0, 8, author_name if author_name else "Unknown Analyst", ln=True)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_x(left_margin)
+    pdf.cell(40, 8, "Dataset Name:", border=0)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 8, dataset_name, ln=True)
+    
+    pdf.set_font("Helvetica", "B", 12)
+    pdf.set_x(left_margin)
+    pdf.cell(40, 8, "Generated On:", border=0)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 8, datetime.datetime.now().strftime("%B %d, %Y - %H:%M"), ln=True)
+    
+    # Context Block
+    if domain_context:
+        pdf.ln(15)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "Domain Context", ln=True, align="C")
+        pdf.set_font("Helvetica", "", 11)
+        pdf.multi_cell(0, 6, f"Industry: {domain_context.get('industry', 'General Business')}", align="C")
+        pdf.multi_cell(0, 6, domain_context.get('business_summary', ""), align="C")
 
-    # Section 1 - Dataset Overview
+    # ---------------------------------------------------------
+    # SECTION 1: DATA CLEANING LOGS
+    # ---------------------------------------------------------
+    pdf.add_page()
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "1. Dataset Overview", ln=True)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, f"Overall Health Score: {health_score}/100", ln=True)
-    pdf.cell(0, 8, f"Total Rows: {summary_stats.get('rows', 0)}", ln=True)
-    pdf.cell(0, 8, f"Total Columns: {summary_stats.get('cols', 0)}", ln=True)
-    pdf.cell(0, 8, f"Global Null Percentage: {summary_stats.get('null_percentage', 0):.2f}%", ln=True)
+    pdf.set_text_color(44, 62, 80)
+    pdf.cell(0, 15, "1. Data Cleaning Narrative", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    
+    pdf.multi_cell(0, 6, "The dataset was subjected to a rigorous 12-step cleaning architecture, assessing missingness, enforcing distribution bounds via Winsorization, and filtering uninformative primary keys.")
     pdf.ln(5)
     
-    # Schema Table
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(60, 8, "Column", border=1)
-    pdf.cell(40, 8, "Type", border=1)
-    pdf.cell(40, 8, "Null %", border=1)
-    pdf.ln()
-    pdf.set_font("Helvetica", "", 10)
-    
-    # Write at most 30 columns to prevent massive PDFs for wide tables
-    for col, meta in list(schema.items())[:30]:
-        pdf.cell(60, 8, str(col)[:25], border=1)
-        pdf.cell(40, 8, str(meta['dtype']), border=1)
-        pdf.cell(40, 8, f"{meta['null_percentage']:.1f}%", border=1)
-        pdf.ln()
-    if len(schema) > 30:
-        pdf.cell(140, 8, f"... and {len(schema)-30} more columns", border=1, ln=True)
-    
+    if cleaning_logs:
+        pdf.set_font("Helvetica", "B", 11)
+        pdf.cell(0, 8, "Variables Dropped/Filtered:", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        for col, reason in cleaning_logs.items():
+            pdf.cell(5, 6, "-")
+            pdf.multi_cell(0, 6, f"[{col}]: {reason}")
+    else:
+        pdf.multi_cell(0, 6, "No severe structural anomalies were detected requiring column deletion.")
+        
     pdf.ln(10)
     
-    # Section 2 - Summary Statistics
+    # ---------------------------------------------------------
+    # SECTION 2: EXPLORATORY DATA ANALYSIS
+    # ---------------------------------------------------------
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "2. Summary Statistics (Numeric)", ln=True)
-    pdf.ln(5)
+    pdf.cell(0, 10, "2. Exploratory Visualizations", ln=True)
     
-    if summary_stats.get('numeric_stats'):
-        pdf.set_font("Helvetica", "B", 10)
-        col_w = 38
-        pdf.cell(col_w, 8, "Column", border=1)
-        pdf.cell(col_w, 8, "Mean", border=1)
-        pdf.cell(col_w, 8, "Median", border=1)
-        pdf.cell(col_w, 8, "Std", border=1)
-        pdf.cell(col_w, 8, "Min/Max", border=1)
-        pdf.ln()
-        
-        pdf.set_font("Helvetica", "", 10)
-        for col, stats in list(summary_stats['numeric_stats'].items())[:20]: # Limit to 20
-            pdf.cell(col_w, 8, str(col)[:18], border=1)
-            pdf.cell(col_w, 8, f"{stats.get('mean', 0):.2f}", border=1)
-            pdf.cell(col_w, 8, f"{stats.get('median', 0):.2f}", border=1)
-            pdf.cell(col_w, 8, f"{stats.get('std', 0):.2f}", border=1)
-            pdf.cell(col_w, 8, f"{stats.get('min',0):.1f}/{stats.get('max',0):.1f}", border=1)
-            pdf.ln()
+    if eda_images:
+        for img_bytes in eda_images:
+            if img_bytes:
+                img_io = io.BytesIO(img_bytes)
+                # Ensure it fits on the page constraints nicely
+                pdf.image(img_io, w=180)
+                pdf.ln(10)
     else:
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 8, "No numeric columns available.", ln=True)
-
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 8, "No visual distributions were selected for the report.", ln=True)
+        
     pdf.add_page()
-    
-    # Section 3 - ML Model Results
+    # ---------------------------------------------------------
+    # SECTION 3: MACHINE LEARNING LEADERBOARD
+    # ---------------------------------------------------------
     pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "3. ML Model Results", ln=True)
-    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 10, "3. Predictive Core Results", ln=True)
     
-    if ml_results.get('best_model_name'):
-        pdf.cell(0, 8, f"Task Type: {ml_results.get('task_type', 'N/A').capitalize()}", ln=True)
-        pdf.cell(0, 8, f"Best Model: {ml_results.get('best_model_name', 'N/A')}", ln=True)
-        pdf.cell(0, 8, f"{ml_results.get('metric_name', 'Metric')}: {ml_results.get('best_metric_value', 'N/A')}", ln=True)
+    if ml_results.get('leaderboard'):
+        pdf.set_font("Helvetica", "", 11)
+        target = domain_context.get('target_variable', 'Unknown Target') if domain_context else 'Target'
+        task = ml_results.get('task_type', 'N/A').title()
+        pdf.multi_cell(0, 6, f"An automated {task} sweep was conducted predicting '{target}'. The leaderboard reflects hold-out testing performance.")
         pdf.ln(5)
         
-        # Feature Importance Table
         pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Top 10 Feature Importances", ln=True)
-        pdf.ln(2)
-        
+        pdf.cell(0, 8, "Model Leaderboard", ln=True)
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(90, 8, "Feature", border=1)
-        pdf.cell(50, 8, "Importance Score", border=1)
+        
+        # Table Header
+        col_w = 90
+        pdf.cell(col_w, 8, "Algorithm", border=1)
+        pdf.cell(col_w, 8, ml_results.get('metric_name', 'Score'), border=1)
         pdf.ln()
         
         pdf.set_font("Helvetica", "", 10)
-        for feat, score in ml_results.get('feature_importance', {}).items():
-            pdf.cell(90, 8, str(feat)[:40], border=1)
-            pdf.cell(50, 8, f"{score:.4f}", border=1)
+        for entry in ml_results.get('leaderboard', []):
+            pdf.cell(col_w, 8, str(entry.get('Model')), border=1)
+            pdf.cell(col_w, 8, f"{entry.get(ml_results.get('metric_name'), 0):.4f}", border=1)
             pdf.ln()
-    else:
-        pdf.cell(0, 8, "No model trained or evaluated.", ln=True)
 
-    pdf.ln(10)
-    
-    # Section 4 - NLP Query Transcript
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(0, 10, "4. NLP Query Transcript", ln=True)
-    pdf.set_font("Helvetica", "", 10)
-    
-    if query_log:
-        for entry in query_log:
+        pdf.ln(10)
+        
+        if ml_results.get('feature_importance'):
+            pdf.set_font("Helvetica", "B", 12)
+            pdf.cell(0, 8, "Top 10 Feature Importances", ln=True)
             pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(0, 6, f"[{entry['timestamp']}] Q: {entry['question']}", ln=True)
-            pdf.set_font("Helvetica", "", 10)
-            resp = entry.get('response', {})
-            filt = resp.get('filter_code')
-            chart = resp.get('chart_type')
-            err = resp.get('error')
+            pdf.cell(90, 8, "Feature", border=1)
+            pdf.cell(90, 8, "Relative Importance", border=1)
+            pdf.ln()
             
-            if err:
-                pdf.cell(0, 6, f"Error: {err}", ln=True)
-            else:
-                pdf.cell(0, 6, f"Filter Code: {filt if filt else 'None'}", ln=True)
-                pdf.cell(0, 6, f"Chart Required: {chart if chart else 'None'}", ln=True)
-            pdf.ln(3)
+            pdf.set_font("Helvetica", "", 10)
+            for feat, score in ml_results.get('feature_importance', {}).items():
+                pdf.cell(90, 8, str(feat)[:40], border=1)
+                pdf.cell(90, 8, f"{score:.4f}", border=1)
+                pdf.ln()
     else:
-        pdf.cell(0, 8, "No natural language queries logged.", ln=True)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.cell(0, 8, "No models were computed.", ln=True)
+        
+    pdf.ln(10)
 
-    # fpdf2 outputs directly as bytearray via output() without arguments
+    # ---------------------------------------------------------
+    # SECTION 4: NLP SAVED QUERIES
+    # ---------------------------------------------------------
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.cell(0, 10, "4. Derived Analyst Insights", ln=True)
+    pdf.set_font("Helvetica", "", 11)
+    
+    if saved_queries:
+        for idx, sq in enumerate(saved_queries):
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.multi_cell(0, 8, f"Query {idx+1}: {sq.get('question', '')}")
+            pdf.set_font("Helvetica", "", 10)
+            
+            if sq.get('filter_logic'):
+                pdf.multi_cell(0, 6, f"Data Subspace Definition: {sq['filter_logic']}")
+                
+            q_img = sq.get('image_bytes')
+            if q_img:
+                pdf.ln(3)
+                pdf.image(io.BytesIO(q_img), w=160)
+            pdf.ln(10)
+    else:
+        pdf.multi_cell(0, 8, "No natural language queries were attached to this report.")
+
     try:
-        # return string conceptually, then cast correctly for fpdf2
         return bytes(pdf.output())
     except Exception:
-        # Fallback for some fpdf variants
         return pdf.output(dest='S').encode('latin1')

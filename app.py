@@ -2,12 +2,13 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+import json
 
 from agents.ingestion_agent import IngestionAgent
 from agents.cleaning_agent import CleaningAgent
 from agents.transformation_agent import TransformationAgent
 from agents.ml_agent import MLAgent
+from agents.domain_agent import DomainAgent
 from agents.nlp_agent import NLPAgent
 
 from utils.pdf_generator import generate_pdf
@@ -15,20 +16,15 @@ from utils.helpers import (
     render_health_badge, 
     df_to_plotly_heatmap, 
     df_to_plotly_histogram, 
-    apply_nlp_filter
+    apply_nlp_filter,
+    plotly_to_image_bytes
 )
 
 # ==========================================
 # 1. Page Config
 # ==========================================
-# We initialize PROJECT_NAME early via session state to use it in page config if desired,
-# though page config must be the first Streamlit command. We'll use a generic or session one.
-default_project_name = "Analytics Platform"
-if 'PROJECT_NAME' not in st.session_state:
-    st.session_state['PROJECT_NAME'] = default_project_name
-
 st.set_page_config(
-    page_title=st.session_state['PROJECT_NAME'],
+    page_title="Automated Analytics v2",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -36,269 +32,346 @@ st.set_page_config(
 # ==========================================
 # 2. Session State Initialization
 # ==========================================
-def init_session_state():
-    state_keys = {
-        'raw_df': None,
-        'clean_df': None,
-        'transformed_df': None,
-        'schema': {},
-        'health_score': 0.0,
-        'quality_issues': [],
-        'ml_results': {},
-        'query_log': [],
-        'pipeline_stage': 'Awaiting Data'
-    }
-    for key, default_val in state_keys.items():
-        if key not in st.session_state:
-            st.session_state[key] = default_val
+STATE_KEYS = {
+    'raw_df': None,
+    'clean_df': None,
+    'transformed_df': None,
+    'schema': {},
+    'domain_context': {},
+    'cleaning_logs': {},
+    'health_score': 0.0,
+    'ml_results': {},
+    'saved_nlp_queries': [], 
+    'eda_images_bytes': [],
+    'pipeline_stage': 'Awaiting Data',
+    
+    # Metadata
+    'author_name': '',
+    'project_title': 'Analytics Platform V2',
+    'project_desc': '',
+    'dataset_desc': ''
+}
 
-init_session_state()
+for k, v in STATE_KEYS.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # ==========================================
-# 3. Sidebar Construction
+# 3. Sidebar Configuration
 # ==========================================
 with st.sidebar:
-    st.title("⚙️ Configuration")
-    project_name = st.text_input("Project Name", value=st.session_state['PROJECT_NAME'])
-    # Update title dynamically on reload
-    st.session_state['PROJECT_NAME'] = project_name
+    st.title("⚙️ Report Configuration")
     
-    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    run_pipeline_btn = st.button("🚀 Run Full Pipeline", use_container_width=True)
+    # User / Report Params
+    st.session_state['project_title'] = st.text_input("Project Title", value=st.session_state['project_title'])
+    st.session_state['author_name'] = st.text_input("Author Name", placeholder="e.g. Jane Doe")
+    st.session_state['project_desc'] = st.text_area("Project Description")
+    st.session_state['dataset_desc'] = st.text_input("Dataset Context target (Optional)")
     
     st.divider()
     
+    uploaded_file = st.file_uploader("Upload Dataset (CSV / XLXS)", type=["csv", "xlsx", "xls"])
+    run_pipeline_btn = st.button("🚀 Execute Smart Pipeline", use_container_width=True)
+    
+    st.divider()
     st.subheader("💓 Dataset Vital Signs")
     
-    # Calculate Display Metrics safely
     df_ref = st.session_state['raw_df']
     rows = df_ref.shape[0] if df_ref is not None else 0
     cols = df_ref.shape[1] if df_ref is not None else 0
     
-    if df_ref is not None:
-        null_pct = (df_ref.isnull().sum().sum() / (rows * cols)) * 100
-    else:
-        null_pct = 0.0
-        
     st.metric("Rows", rows)
     st.metric("Columns", cols)
-    st.metric("Global Null %", f"{null_pct:.2f}%")
-    
-    st.markdown("**Health Score:**")
-    st.markdown(render_health_badge(st.session_state['health_score']), unsafe_allow_html=True)
-    
     st.markdown(f"**Stage:** `{st.session_state['pipeline_stage']}`")
     
-    st.divider()
-    
-    st.subheader("📥 Export")
-    if st.session_state['raw_df'] is not None and st.session_state['pipeline_stage'] == 'Completed':
-        # Prepare context for PDF
-        summary_stats = {
-            'rows': rows,
-            'cols': cols,
-            'null_percentage': null_pct,
-            'numeric_stats': st.session_state['raw_df'].describe().to_dict() if not st.session_state['raw_df'].empty else {}
-        }
-        
-        with st.spinner("Generating PDF..."):
-            pdf_bytes = generate_pdf(
-                project_name=st.session_state['PROJECT_NAME'],
-                summary_stats=summary_stats,
-                health_score=st.session_state['health_score'],
-                schema=st.session_state['schema'],
+    if st.session_state['pipeline_stage'] == 'Completed':
+        st.divider()
+        st.subheader("📥 Export Final Report")
+        with st.spinner("Generating PDF Profile..."):
+            pdf_b = generate_pdf(
+                author_name=st.session_state['author_name'],
+                dataset_name=uploaded_file.name if uploaded_file else "Data",
+                project_desc=st.session_state['project_desc'],
+                domain_context=st.session_state['domain_context'],
+                cleaning_logs=st.session_state['cleaning_logs'],
                 ml_results=st.session_state['ml_results'],
-                query_log=st.session_state['query_log']
+                eda_images=st.session_state['eda_images_bytes'],
+                saved_queries=st.session_state['saved_nlp_queries']
             )
-            
         st.download_button(
-            label="Download Full Analysis",
-            data=pdf_bytes,
-            file_name="analysis_report.pdf",
+            label="Download Complete PDF",
+            data=pdf_b,
+            file_name="Automated_Analytics_Report.pdf",
             mime="application/pdf",
             use_container_width=True
         )
 
-
 # ==========================================
-# Execution Logic (Sidebar triggered)
+# Execution Engine Pipeline
 # ==========================================
-if run_pipeline_btn:
-    if uploaded_file is None:
-        st.sidebar.error("Please upload a CSV file first.")
-    else:
-        try:
-            # Phase 1: Ingestion
-            with st.spinner("Agent 1/5: Ingesting & Profiling..."):
-                ingestor = IngestionAgent()
-                st.session_state['raw_df'] = ingestor.load_csv(uploaded_file)
-                st.session_state['schema'] = ingestor.infer_schema(st.session_state['raw_df'])
-                st.session_state['health_score'] = ingestor.compute_health_score(st.session_state['raw_df'])
-                st.session_state['quality_issues'] = ingestor.flag_quality_issues(st.session_state['raw_df'])
-                st.session_state['pipeline_stage'] = 'Profiling Done'
+if run_pipeline_btn and uploaded_file:
+    try:
+        # Phase 1: Ingestion
+        with st.spinner("Agent 1/4: Ingesting & Heuristic Checks..."):
+            ingestor = IngestionAgent()
+            raw_data = ingestor.load_data(uploaded_file)
+            st.session_state['raw_df'] = raw_data
+            
+            # Filter primary keys and Zero variance
+            filtered_df, drops_1 = ingestor.filter_primary_features(raw_data)
+            st.session_state['health_score'] = ingestor.compute_health_score(filtered_df)
+            st.session_state['pipeline_stage'] = 'Ingestion Finished'
+            
+        # Phase 2: Domain Context Identification
+        with st.spinner("Agent 2/4: OpenAI Context Identification..."):
+            initial_schema = ingestor.infer_schema(filtered_df)
+            sample_rows = filtered_df.head(5).to_dict(orient='records')
+            
+            domain = DomainAgent()
+            context = domain.analyze_context(initial_schema, sample_rows)
+            st.session_state['domain_context'] = context
+            st.session_state['pipeline_stage'] = 'Context Resolved'
+            
+        # Phase 3: Rigorous 12-Step Cleaning
+        with st.spinner("Agent 3/4: Deep Cleaning (Missing, Outliers, Bounds)..."):
+            cleaner = CleaningAgent()
+            clean_df, miss_drops, dups_removed = cleaner.clean(filtered_df)
+            
+            # Aggregate cleaning logs for PDF
+            st.session_state['cleaning_logs'] = {**drops_1, **miss_drops}
+            if dups_removed > 0:
+                st.session_state['cleaning_logs']['System_Dups'] = f"Removed {dups_removed} duplicate rows."
                 
-            # Phase 2: Cleaning
-            with st.spinner("Agent 2/5: Cleaning & Imputing..."):
-                cleaner = CleaningAgent()
-                st.session_state['clean_df'] = cleaner.clean(st.session_state['raw_df'], st.session_state['schema'])
-                st.session_state['pipeline_stage'] = 'Cleaning Done'
+            st.session_state['clean_df'] = clean_df
+            
+            # WE MUST Re-infer schema because cleaning agent standardizes column names!
+            clean_schema = ingestor.infer_schema(clean_df)
+            st.session_state['schema'] = clean_schema
+            st.session_state['pipeline_stage'] = 'Cleaning Done'
+            
+        # Phase 4: Transformation for ML
+        with st.spinner("Agent 4/4: Feature Enc & Scale..."):
+            transformer = TransformationAgent()
+            st.session_state['transformed_df'] = transformer.transform(st.session_state['clean_df'], clean_schema)
+            # Re-verify target variable maps correctly just in case standardization broke the case
+            target = context.get('target_variable', "")
+            clean_cols = st.session_state['transformed_df'].columns
+            if target and target.lower() in [x.lower() for x in clean_cols]:
+                true_target = [x for x in clean_cols if x.lower() == target.lower()][0]
+                st.session_state['domain_context']['target_variable'] = true_target
                 
-            # Phase 3: Transformation
-            with st.spinner("Agent 3/5: Encoding & Scaling..."):
-                transformer = TransformationAgent()
-                st.session_state['transformed_df'] = transformer.transform(st.session_state['clean_df'], st.session_state['schema'])
-                st.session_state['pipeline_stage'] = 'Transformation Done'
-                
-            # Phase 4: Machine Learning 
-            # We defer ML until the user selects a target in the ML tab, OR we try to predict the last column.
-            # To be robust, let's just mark it complete and run ML interactively in the tab.
             st.session_state['pipeline_stage'] = 'Completed'
             st.rerun()
 
-        except Exception as e:
-            st.sidebar.error(f"Pipeline Error: {e}")
-
+    except Exception as e:
+        st.sidebar.error(f"Execution Error: {e}")
 
 # ==========================================
-# 4. Main Area Layout
+# Main Dashboard UI
 # ==========================================
-st.title(st.session_state['PROJECT_NAME'])
+st.title(st.session_state['project_title'])
 
 if st.session_state['raw_df'] is None:
-    st.info("👈 Upload a CSV and click 'Run Full Pipeline' to begin.")
+    st.info("👈 Upload your dataset and execute the pipeline to begin.")
 else:
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🔍 Analysis", "🤖 ML Results", "💬 NLP Query"])
+    t1, t2, t3, t4, t5 = st.tabs(["🚀 Phase 1: Context", "🔍 Phase 2: EDA", "🤖 Phase 3: ML Modeling", "💬 Phase 4: Query Insights", "📑 Report Architect"])
     
-    # ------------------
-    # TAB 1: Overview
-    # ------------------
-    with tab1:
-        st.subheader("Data Preview")
-        st.dataframe(st.session_state['raw_df'].head(100), use_container_width=True)
-        
-        col_s1, col_s2 = st.columns([1, 1])
-        with col_s1:
-            st.subheader("Inferred Schema")
-            # Convert schema dict to dataframe for nice rendering
-            schema_df = pd.DataFrame.from_dict(st.session_state['schema'], orient='index')
-            st.dataframe(schema_df, use_container_width=True)
-            
-        with col_s2:
-            st.subheader("Quality Warnings")
-            if not st.session_state['quality_issues']:
-                st.success("No critical quality issues detected!")
+    # -------------------------------------
+    # TAB 1: Profile & Context
+    # -------------------------------------
+    with t1:
+        c1, c2 = st.columns([1, 1])
+        with c1:
+            st.subheader("Data Health & Overview")
+            st.markdown(render_health_badge(st.session_state['health_score']), unsafe_allow_html=True)
+            st.dataframe(st.session_state['clean_df'].head(50), use_container_width=True)
+        with c2:
+            ctx = st.session_state['domain_context']
+            if ctx:
+                st.subheader("🧠 OpenAI Domain Resolution")
+                st.info(f"**Extrapolated Industry:** {ctx.get('industry', 'N/A')}")
+                st.success(f"**Identified Core ML Target:** `{ctx.get('target_variable', 'None')}`")
+                st.warning(f"**Best Metric Strategy:** {ctx.get('evaluation_metric', 'N/A')}")
+                st.markdown(f"*{ctx.get('business_summary', '')}*")
+                
+            st.subheader("🧹 Cleaning Modifications")
+            if st.session_state['cleaning_logs']:
+                st.json(st.session_state['cleaning_logs'])
             else:
-                for issue in st.session_state['quality_issues']:
-                    st.warning(issue)
-                    
-    # ------------------
-    # TAB 2: Analysis
-    # ------------------
-    with tab2:
-        st.subheader("Correlation Heatmap")
-        st.plotly_chart(df_to_plotly_heatmap(st.session_state['clean_df']), use_container_width=True)
-        
-        st.divider()
-        st.subheader("Feature Distributions")
-        selected_col = st.selectbox("Select a column to view distribution:", st.session_state['clean_df'].columns)
-        if selected_col:
-            st.plotly_chart(df_to_plotly_histogram(st.session_state['clean_df'], selected_col), use_container_width=True)
+                st.write("Dataset passed baseline checks un-scathed.")
+
+    # -------------------------------------
+    # TAB 2: Exploratory Data Analysis
+    # -------------------------------------
+    with t2:
+        st.subheader("Statistical Distributions")
+        c3, c4 = st.columns([1, 2])
+        with c3:
+            s_col = st.selectbox("Analyze Element:", st.session_state['clean_df'].columns)
+            st.markdown("All generated graphs using this tool can be appended to your final offline PDF report automatically.")
             
-    # ------------------
-    # TAB 3: ML Results
-    # ------------------
-    with tab3:
-        st.subheader("Automated Predictive Modeling")
-        st.markdown("Select a target variable to trigger automated feature engineering and model training.")
+        with c4:
+            if s_col:
+                fig_hist = df_to_plotly_histogram(st.session_state['clean_df'], s_col)
+                st.plotly_chart(fig_hist, use_container_width=True)
+                
+                if st.button(f"📸 Add {s_col} Distribution to Report"):
+                    img_bytes = plotly_to_image_bytes(fig_hist)
+                    if img_bytes:
+                        st.session_state['eda_images_bytes'].append(img_bytes)
+                        st.success("Graph Captured!")
+                        
+        st.divider()
+        st.subheader("Macro Correlations")
+        fig_heat = df_to_plotly_heatmap(st.session_state['clean_df'])
+        st.plotly_chart(fig_heat, use_container_width=True)
+        if st.button("📸 Add Heatmap to Report"):
+            h_bytes = plotly_to_image_bytes(fig_heat)
+            if h_bytes:
+                st.session_state['eda_images_bytes'].append(h_bytes)
+                st.success("Heatmap Captured!")
+
+    # -------------------------------------
+    # TAB 3: ML Algorithm Suite
+    # -------------------------------------
+    with t3:
+        st.subheader("Model Prototyping Leaderboard")
+        opt_target = st.session_state['domain_context'].get('target_variable', "")
+        all_cols = list(st.session_state['transformed_df'].columns)
         
-        target_options = st.session_state['clean_df'].columns.tolist()
-        target_col = st.selectbox("Target Column:", target_options, index=len(target_options)-1 if target_options else 0)
+        # Ensure default target exists
+        idx = all_cols.index(opt_target) if opt_target in all_cols else 0
+        target_col = st.selectbox("Confirm Target Variable:", all_cols, index=idx)
         
-        if st.button("🚀 Train Model"):
-            with st.spinner("Agent 4/5: Training ML Models..."):
-                ml_agent = MLAgent()
-                # Run on transformed df for best results
+        if st.button("🚂 Initiate Algorithm Sweeps"):
+            with st.spinner("Agent Training Models (Multiple)..."):
+                ml = MLAgent()
                 try:
-                    res = ml_agent.train(st.session_state['transformed_df'], target_col)
+                    res = ml.train(st.session_state['transformed_df'], target_col)
                     st.session_state['ml_results'] = res
                 except Exception as e:
-                    st.error(f"Modeling failed: {e}")
-
-        res = st.session_state.get('ml_results', {})
-        if res:
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("Task Type", res.get('task_type', '').capitalize())
-            mc2.metric("Best Model", res.get('best_model_name', ''))
-            mc3.metric(res.get('metric_name', 'Metric Value'), res.get('best_metric_value', ''))
+                    st.error(f"Algorithm Sweep Failed: {e}")
+                    
+        mlr = st.session_state['ml_results']
+        if mlr:
+            st.success(f"Sweep Completed: **{mlr.get('task_type', '').capitalize()}** Problem.")
+            st.markdown(f"**Dominant Engine:** {mlr.get('best_model_name')}")
             
-            st.markdown("### Feature Importance")
-            fi_p = res.get('feature_importance', {})
-            if fi_p:
-                fi_df = pd.DataFrame(list(fi_p.items()), columns=['Feature', 'Importance']).sort_values(by='Importance', ascending=True)
-                fig_fi = px.bar(fi_df, x='Importance', y='Feature', orientation='h', template='plotly_dark')
-                st.plotly_chart(fig_fi, use_container_width=True)
-            else:
-                st.info("Feature importance not available for this model.")
+            import plotly.express as px
+            # Render Leaderboard
+            df_board = pd.DataFrame(mlr.get('leaderboard', []))
+            st.dataframe(df_board, use_container_width=True)
+            
+            st.markdown("### Structural Importance Extraction")
+            fi = mlr.get('feature_importance', {})
+            if fi:
+                df_fi = pd.DataFrame(list(fi.items()), columns=['Feature', 'Importance']).sort_values(by='Importance')
+                fig_fi = px.bar(df_fi, x='Importance', y='Feature', orientation='h', title="Feature Dependency Map")
+                # Add layout properties
+                from utils.helpers import get_minimalist_layout
+                fig_fi.update_layout(**get_minimalist_layout())
                 
-    # ------------------
-    # TAB 4: NLP Query
-    # ------------------
-    with tab4:
-        st.subheader("Natural Language Querying")
-        nlp_agent = NLPAgent()
+                st.plotly_chart(fig_fi, use_container_width=True)
+                
+                if st.button("📸 Attach ML Dependency Plot"):
+                    btn_bytes = plotly_to_image_bytes(fig_fi)
+                    if btn_bytes:
+                        st.session_state['eda_images_bytes'].append(btn_bytes)
+                        st.success("Algorithm Plot Captured!")
+                        
+    # -------------------------------------
+    # TAB 4: NLP Semantic Query API
+    # -------------------------------------
+    with t4:
+        st.subheader("Semantic English-to-Graph Generation")
+        st.markdown("Talk directly to your dataset. The system filters it safely behind the scenes.")
         
-        if not nlp_agent.available:
-            st.warning("⚠️ OpenAI API Key not configured. NLP features are disabled.")
-            
-        nlp_target_col = st.selectbox("Select context column (Optional):", st.session_state['clean_df'].columns, key="nlp_target")
-        query_input = st.text_input("Ask a question about your data (e.g., 'Show me sales over 500 in a bar chart'):")
+        sugg = st.session_state['domain_context'].get('suggested_queries', [])
+        if sugg:
+            st.caption("AI Ideas for this structure:")
+            for s in sugg:
+                st.markdown(f"- _{s}_")
+                
+        user_q = st.text_input("What do you want to see? (e.g., 'Chart revenue by user segments')")
         
-        if st.button("Submit Query") and query_input:
-            with st.spinner("Agent 5/5: Analyzing query..."):
-                cols_context = st.session_state['clean_df'].columns.tolist()
-                response = nlp_agent.query(query_input, st.session_state['clean_df'], cols_context)
-                nlp_agent.log_query(query_input, response)
+        if st.button("Execute Natural Language") and user_q:
+            nlp = NLPAgent()
+            with st.spinner("Processing semantics..."):
+                response = nlp.query(user_q, st.session_state['clean_df'], st.session_state['clean_df'].columns.tolist())
                 
                 if 'error' in response:
                     st.error(response['error'])
                 else:
-                    st.success("Query processed safely without modifying the base state.")
+                    fc = response.get('filter_code')
+                    ct = response.get('chart_type')
                     
-                    filter_code = response.get('filter_code')
-                    chart_type = response.get('chart_type')
+                    df_v = apply_nlp_filter(st.session_state['clean_df'], fc)
+                    st.code(fc if fc else "No sub-filtering applied.", language='python')
                     
-                    # Apply filter
-                    view_df = apply_nlp_filter(st.session_state['clean_df'], filter_code)
-                    
-                    if filter_code:
-                        st.code(f"Applied Logic: {filter_code}", language='python')
-                        
-                    st.dataframe(view_df.head(50), use_container_width=True)
-                    
-                    # Apply Chart
-                    if chart_type and nlp_target_col:
+                    current_fig = None
+                    if ct:
+                        from plotly import express as pxe
+                        from utils.helpers import get_minimalist_layout
                         try:
-                            valid_chart = chart_type.lower().strip()
-                            if valid_chart == 'histogram':
-                                fig = px.histogram(view_df, x=nlp_target_col, template='plotly_dark')
-                            elif valid_chart == 'bar':
-                                fig = px.bar(view_df, x=view_df.index, y=nlp_target_col, template='plotly_dark')
-                            elif valid_chart == 'line':
-                                fig = px.line(view_df, x=view_df.index, y=nlp_target_col, template='plotly_dark')
-                            elif valid_chart == 'scatter':
-                                # Requires 2 dims usually, we default x to index for simplicity
-                                fig = px.scatter(view_df, x=view_df.index, y=nlp_target_col, template='plotly_dark')
-                            elif valid_chart == 'box':
-                                fig = px.box(view_df, y=nlp_target_col, template='plotly_dark')
-                            else:
-                                st.warning(f"Unrecognized Chart Type: {chart_type}")
-                                fig = None
-                                
-                            if fig:
-                                st.plotly_chart(fig, use_container_width=True)
-                        except Exception as e:
-                            st.warning(f"Could not render chart '{chart_type}': {e}")
+                            # Heuristic assignments for axis
+                            c_x = df_v.columns[0]
+                            c_y = df_v.columns[1] if len(df_v.columns) > 1 else c_x
                             
-        st.divider()
-        with st.expander("Show Query Log"):
-            st.json(st.session_state['query_log'])
+                            c_t = ct.lower()
+                            if c_t == 'bar':
+                                current_fig = pxe.bar(df_v, x=c_x, y=c_y)
+                            elif c_t == 'histogram':
+                                current_fig = pxe.histogram(df_v, x=c_x)
+                            elif c_t == 'line':
+                                current_fig = pxe.line(df_v, x=c_x, y=c_y)
+                            elif c_t == 'scatter':
+                                current_fig = pxe.scatter(df_v, x=c_x, y=c_y)
+                            elif c_t == 'box':
+                                current_fig = pxe.box(df_v, x=c_x)
+                                
+                            if current_fig:
+                                current_fig.update_layout(**get_minimalist_layout())
+                                st.plotly_chart(current_fig, use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Could not map chart cleanly: {e}")
+                            
+                    st.dataframe(df_v.head(20))
+                    
+                    # Store temporally
+                    st.session_state['_last_nlp'] = {
+                        'question': user_q,
+                        'filter_logic': fc,
+                        'current_fig': current_fig
+                    }
+                    
+        # Check if there's a recent query to pin
+        if '_last_nlp' in st.session_state:
+            recent = st.session_state['_last_nlp']
+            st.divider()
+            if st.button("📌 Include This Specific Insight String in Final PDF"):
+                fig_bytes = None
+                if recent.get('current_fig'):
+                    fig_bytes = plotly_to_image_bytes(recent['current_fig'])
+                
+                st.session_state['saved_nlp_queries'].append({
+                    'question': recent['question'],
+                    'filter_logic': recent['filter_logic'],
+                    'image_bytes': fig_bytes
+                })
+                # clear active slot so we don't accidentally save twice
+                del st.session_state['_last_nlp'] 
+                st.success("Appended to Report Roster!")
+
+    # -------------------------------------
+    # TAB 5: Report Preview Architect
+    # -------------------------------------
+    with t5:
+        st.subheader("A4 Export Verification")
+        st.markdown("Ensure your arrays are populated before rendering the actual PDF.")
+        st.write(f"**Queued EDA Graphics:** {len(st.session_state['eda_images_bytes'])} snapshots.")
+        st.write(f"**Pinned Sentences/Queries:** {len(st.session_state['saved_nlp_queries'])} slots.")
+        
+        if st.session_state['ml_results']:
+            st.write("✅ Machine Learning Models loaded.")
+        else:
+            st.write("❌ No ML Algorithm executed yet.")
