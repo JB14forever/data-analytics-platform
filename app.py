@@ -76,8 +76,10 @@ with st.sidebar:
         st.subheader("📥 Export Final Report")
         
         has_content = bool(st.session_state['eda_images_bytes'] or st.session_state['saved_nlp_queries'] or st.session_state.get('ml_results'))
+        
         if not has_content:
-            st.error("⚠️ Nothing is appended to the report as of now. Please add insights from the tabs to generate a comprehensive report.")
+            if st.button("Download Complete PDF", use_container_width=True):
+                st.error("⚠️ Nothing is appended to the report as of now. Please add insights from the tabs to generate a comprehensive report.")
         else:
             with st.spinner("Generating PDF Profile..."):
                 pdf_b = generate_pdf(

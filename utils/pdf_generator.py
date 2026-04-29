@@ -94,9 +94,14 @@ def generate_pdf(
         pdf.set_font("Helvetica", "B", 11)
         pdf.cell(180, 8, "Variables Dropped/Filtered:", ln=True)
         pdf.set_font("Helvetica", "", 10)
-        for col, reason in cleaning_logs.items():
-            # Merged hyphen into the string to avoid horizontal offset crashes
-            pdf.multi_cell(180, 6, f"- [{col}]: {reason}")
+        if isinstance(cleaning_logs, list):
+            for log in cleaning_logs:
+                action = log.get("Column/Action", "Action")
+                reason = log.get("Decision Justification", log.get("Reason", "No justification provided."))
+                pdf.multi_cell(180, 6, f"- [{action}]: {reason}")
+        elif isinstance(cleaning_logs, dict):
+            for col, reason in cleaning_logs.items():
+                pdf.multi_cell(180, 6, f"- [{col}]: {reason}")
     else:
         pdf.multi_cell(180, 6, "No severe structural anomalies were detected requiring column deletion.")
         
