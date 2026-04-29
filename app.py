@@ -276,6 +276,15 @@ else:
             st.subheader("📋 Full Pipeline Execution Audit")
             audit_log = st.session_state.get('pipeline_audit_log', [])
             if audit_log:
+                # Always patch Best Model Selection row with live ml_results so score is never stale
+                mlr_patch = st.session_state.get('ml_results', {})
+                if mlr_patch and mlr_patch.get('best_metric_value') is not None:
+                    live_score = mlr_patch.get('best_metric_value', 0.0)
+                    live_metric = mlr_patch.get('metric_name', '')
+                    live_model = mlr_patch.get('best_model_name', 'N/A')
+                    for row in audit_log:
+                        if row.get('Step') == 'Best Model Selection':
+                            row['Detail'] = f"Best model: '{live_model}' | {live_metric}: {live_score:.4f}"
                 audit_df = pd.DataFrame(audit_log)
                 st.dataframe(audit_df, use_container_width=True, hide_index=True)
             else:
