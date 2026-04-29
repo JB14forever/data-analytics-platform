@@ -67,20 +67,24 @@ class CleaningAgent:
             
             if null_pct > 30:
                 df_clean = df_clean.drop(columns=[col])
-                dropped_cols[col] = f"Dropped due to severe missingness (>30% missing: {null_pct:.1f}%)."
+                dropped_cols[col] = f"Dropped column entirely due to severe missingness ({null_pct:.1f}% missing, which exceeds the 30% reliability threshold)."
             else:
                 if pd.api.types.is_numeric_dtype(df_clean[col]):
                     c_skew = skew(df_clean[col].dropna())
                     if pd.isna(c_skew) or abs(c_skew) > 0.5:
                         df_clean[col] = df_clean[col].fillna(df_clean[col].median())
+                        dropped_cols[col] = f"Imputed {null_pct:.1f}% missing values using the Median. Justification: Distribution is highly skewed, making median more robust than mean."
                     else:
                         df_clean[col] = df_clean[col].fillna(df_clean[col].mean())
+                        dropped_cols[col] = f"Imputed {null_pct:.1f}% missing values using the Mean. Justification: Distribution is relatively normal."
                 elif pd.api.types.is_datetime64_any_dtype(df_clean[col]):
                     df_clean[col] = df_clean[col].ffill().bfill()
+                    dropped_cols[col] = f"Imputed {null_pct:.1f}% missing values using Forward/Backward Fill to maintain temporal continuity."
                 else:
                     mode_s = df_clean[col].mode()
                     if not mode_s.empty:
                         df_clean[col] = df_clean[col].fillna(mode_s[0])
+                        dropped_cols[col] = f"Imputed {null_pct:.1f}% missing categorical values using the Mode (most frequent value)."
                         
         return df_clean, dropped_cols
 
@@ -117,24 +121,32 @@ class CleaningAgent:
         removed = initial_len - len(df_dedup)
         return df_dedup, removed
 
-    def clean(self, df: pd.DataFrame) -> tuple[pd.DataFrame, dict, int]:
+    def clean(self, df: pd.DataFrame, progress_bar=None, start_pct=0, end_pct=100) -> tuple[pd.DataFrame, dict, int]:
         """
         Orchestrates the 12-Step pipeline up to step 9. 
         Encoding and Scaling are delegated to TransformationAgent.
         """
+        step_size = (end_pct - start_pct) / 5
+        current_pct = start_pct
+        
         # Step 5: Standardization
         df_step = self.standardize_columns(df)
+        if progress_bar: current_pct += step_size; progress_bar.progress(int(current_pct))
         
         # Step 4, 7, 8: Type fixing and Text standardization
         df_step = self.fix_data_types_and_text(df_step)
+        if progress_bar: current_pct += step_size; progress_bar.progress(int(current_pct))
         
         # Step 3: Duplicate removal
         df_step, duplicates_removed = self.remove_duplicates(df_step)
+        if progress_bar: current_pct += step_size; progress_bar.progress(int(current_pct))
         
         # Step 2: Missing Values
         df_step, missing_drops = self.handle_missing(df_step)
+        if progress_bar: current_pct += step_size; progress_bar.progress(int(current_pct))
         
         # Step 6 & 9: Outliers & Range Validation
         df_step = self.handle_outliers_and_ranges(df_step)
+        if progress_bar: current_pct += step_size; progress_bar.progress(int(end_pct))
         
         return df_step, missing_drops, duplicates_removed

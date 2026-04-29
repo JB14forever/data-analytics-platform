@@ -27,11 +27,11 @@ def get_minimalist_layout():
     return dict(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Inter, -apple-system, sans-serif", color="#4A4A4A"),
+        font=dict(family="Inter, -apple-system, sans-serif"),
         margin=dict(l=40, r=40, t=60, b=40),
-        xaxis=dict(showgrid=False, zeroline=False, linecolor="#E0E0E0"),
-        yaxis=dict(showgrid=True, gridcolor="#F5F5F5", zeroline=False, linecolor="#E0E0E0"),
-        title_font=dict(size=18, color="#2C3E50", family="Inter, sans-serif")
+        xaxis=dict(showgrid=False, zeroline=False, linecolor="rgba(128,128,128,0.2)"),
+        yaxis=dict(showgrid=True, gridcolor="rgba(128,128,128,0.1)", zeroline=False, linecolor="rgba(128,128,128,0.2)"),
+        title_font=dict(size=18, family="Inter, sans-serif")
     )
 
 def df_to_plotly_heatmap(df: pd.DataFrame) -> go.Figure:
@@ -49,7 +49,7 @@ def df_to_plotly_heatmap(df: pd.DataFrame) -> go.Figure:
         corr,
         text_auto=True,
         aspect="auto",
-        color_continuous_scale="Teal",
+        color_continuous_scale="Purpor",
         title="Feature Correlation Matrix"
     )
     fig.update_layout(**get_minimalist_layout())
@@ -61,7 +61,7 @@ def df_to_plotly_histogram(df: pd.DataFrame, col: str) -> go.Figure:
         x=col, 
         marginal="box",
         title=f"Distribution Analysis: {col}",
-        color_discrete_sequence=['#3b82f6'], # Soft pleasant blue
+        color_discrete_sequence=['#6366f1'], # Modern Indigo
         opacity=0.8
     )
     # Fix layout

@@ -56,14 +56,6 @@ for k, v in STATE_KEYS.items():
 # ==========================================
 # 3. Sidebar Configuration
 # ==========================================
-with st.sidebar:
-    st.title("⚙️ Report Configuration")
-    
-    # User / Report Params
-    st.markdown("No active metadata inputs for now.")
-    
-    st.divider()
-    
     uploaded_file = st.file_uploader("Upload Dataset (CSV / XLXS)", type=["csv", "xlsx", "xls"])
     run_pipeline_btn = st.button("🚀 Execute Smart Pipeline", use_container_width=True)
     
@@ -81,29 +73,38 @@ with st.sidebar:
     if st.session_state['pipeline_stage'] == 'Completed':
         st.divider()
         st.subheader("📥 Export Final Report")
-        with st.spinner("Generating PDF Profile..."):
-            pdf_b = generate_pdf(
-                dataset_name=uploaded_file.name if uploaded_file else "Data",
-                domain_context=st.session_state['domain_context'],
-                cleaning_logs=st.session_state['cleaning_logs'],
-                ml_results=st.session_state['ml_results'],
-                eda_images=st.session_state['eda_images_bytes'],
-                saved_queries=st.session_state['saved_nlp_queries']
+        
+        has_content = bool(st.session_state['eda_images_bytes'] or st.session_state['saved_nlp_queries'] or st.session_state.get('ml_results'))
+        if not has_content:
+            st.error("⚠️ Nothing is appended to the report as of now. Please add insights from the tabs to generate a comprehensive report.")
+        else:
+            with st.spinner("Generating PDF Profile..."):
+                pdf_b = generate_pdf(
+                    dataset_name=uploaded_file.name if uploaded_file else "Data",
+                    domain_context=st.session_state['domain_context'],
+                    cleaning_logs=st.session_state['cleaning_logs'],
+                    ml_results=st.session_state['ml_results'],
+                    eda_images=st.session_state['eda_images_bytes'],
+                    saved_queries=st.session_state['saved_nlp_queries']
+                )
+            st.download_button(
+                label="Download Complete PDF",
+                data=pdf_b,
+                file_name="Automated_Analytics_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True
             )
-        st.download_button(
-            label="Download Complete PDF",
-            data=pdf_b,
-            file_name="Automated_Analytics_Report.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
 
 # ==========================================
 # Execution Engine Pipeline
 # ==========================================
 if run_pipeline_btn and uploaded_file:
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     try:
         # Phase 1: Ingestion
+        status_text.text("Phase 1: Ingesting & Heuristic Checks...")
+        progress_bar.progress(10)
         with st.spinner("Agent 1/4: Ingesting & Heuristic Checks..."):
             ingestor = IngestionAgent()
             raw_data = ingestor.load_data(uploaded_file)
@@ -113,8 +114,10 @@ if run_pipeline_btn and uploaded_file:
             filtered_df, drops_1 = ingestor.filter_primary_features(raw_data)
             st.session_state['health_score'] = ingestor.compute_health_score(filtered_df)
             st.session_state['pipeline_stage'] = 'Ingestion Finished'
+        progress_bar.progress(25)
             
         # Phase 2: Domain Context Identification
+        status_text.text("Phase 2: OpenAI Context Identification...")
         with st.spinner("Agent 2/4: OpenAI Context Identification..."):
             initial_schema = ingestor.infer_schema(filtered_df)
             sample_rows = filtered_df.head(5).to_dict(orient='records')
@@ -123,16 +126,24 @@ if run_pipeline_btn and uploaded_file:
             context = domain.analyze_context(initial_schema, sample_rows)
             st.session_state['domain_context'] = context
             st.session_state['pipeline_stage'] = 'Context Resolved'
+        progress_bar.progress(50)
             
         # Phase 3: Rigorous 12-Step Cleaning
+        status_text.text("Phase 3: Deep Cleaning (Missing, Outliers, Bounds)...")
         with st.spinner("Agent 3/4: Deep Cleaning (Missing, Outliers, Bounds)..."):
             cleaner = CleaningAgent()
-            clean_df, miss_drops, dups_removed = cleaner.clean(filtered_df)
+            clean_df, miss_drops, dups_removed = cleaner.clean(filtered_df, progress_bar, 50, 85)
             
-            # Aggregate cleaning logs for PDF
-            st.session_state['cleaning_logs'] = {**drops_1, **miss_drops}
+            # Aggregate cleaning logs for PDF and UI
+            formatted_logs = []
+            for col, reason in drops_1.items():
+                formatted_logs.append({"Phase": "Ingestion", "Column/Action": f"Drop '{col}'", "Decision Justification": reason})
+            for col, reason in miss_drops.items():
+                formatted_logs.append({"Phase": "Cleaning", "Column/Action": f"Modify/Drop '{col}'", "Decision Justification": reason})
             if dups_removed > 0:
-                st.session_state['cleaning_logs']['System_Dups'] = f"Removed {dups_removed} duplicate rows."
+                formatted_logs.append({"Phase": "Cleaning", "Column/Action": "Remove Duplicates", "Decision Justification": f"Removed {dups_removed} identical duplicate rows to ensure model integrity."})
+                
+            st.session_state['cleaning_logs'] = formatted_logs
                 
             st.session_state['clean_df'] = clean_df
             
@@ -140,8 +151,10 @@ if run_pipeline_btn and uploaded_file:
             clean_schema = ingestor.infer_schema(clean_df)
             st.session_state['schema'] = clean_schema
             st.session_state['pipeline_stage'] = 'Cleaning Done'
+        progress_bar.progress(85)
             
         # Phase 4: Transformation for ML
+        status_text.text("Phase 4: Transformation for ML...")
         with st.spinner("Agent 4/4: Feature Enc & Scale..."):
             transformer = TransformationAgent()
             st.session_state['transformed_df'] = transformer.transform(st.session_state['clean_df'], clean_schema)
@@ -153,7 +166,10 @@ if run_pipeline_btn and uploaded_file:
                 st.session_state['domain_context']['target_variable'] = true_target
                 
             st.session_state['pipeline_stage'] = 'Completed'
-            st.rerun()
+            
+        progress_bar.progress(100)
+        status_text.text("Pipeline Execution Completed!")
+        st.rerun()
 
     except Exception as e:
         st.sidebar.error(f"Execution Error: {e}")
@@ -189,9 +205,10 @@ else:
                 st.warning(f"**Best Metric Strategy:** {ctx.get('evaluation_metric', 'N/A')}")
                 st.markdown(f"*{ctx.get('business_summary', '')}*")
                 
-            st.subheader("🧹 Cleaning Modifications")
+            st.subheader("🧹 Pipeline Insights & Decisions")
             if st.session_state['cleaning_logs']:
-                st.json(st.session_state['cleaning_logs'])
+                logs_df = pd.DataFrame(st.session_state['cleaning_logs'])
+                st.dataframe(logs_df, use_container_width=True, hide_index=True)
             else:
                 st.write("Dataset passed baseline checks un-scathed.")
 

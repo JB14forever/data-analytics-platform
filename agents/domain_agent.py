@@ -87,12 +87,24 @@ class DomainAgent:
         possible_targets = [c for c in schema.keys() if any(x in str(c).lower() for x in ['target', 'is_', 'status', 'churn', 'price', 'salary', 'outcome'])]
         target = possible_targets[0] if possible_targets else list(schema.keys())[-1]
         
+        target_info = schema.get(target, {})
+        is_numeric = target_info.get('dtype') == 'numeric'
+        cardinality = target_info.get('cardinality', 100)
+        
+        if is_numeric and cardinality > 10:
+            eval_metric = "RMSE, MAE, R² (Inferred Regression)"
+            business_sum = "Predicting continuous numeric values based on historical trends."
+        else:
+            eval_metric = "Accuracy, F1-Score, ROC-AUC (Inferred Classification)"
+            business_sum = "Categorizing or classifying outcomes based on the provided features."
+        
         return {
             "industry": "General Business",
             "target_variable": target,
-            "evaluation_metric": "Accuracy / RMSE depending on classification or regression.",
-            "business_summary": "Auto-identified schema without semantic domain awareness (API Missing).",
+            "evaluation_metric": eval_metric,
+            "business_summary": business_sum,
             "suggested_queries": [
-                f"Show distribution of {target}."
+                f"Show distribution of {target}.",
+                f"How does {target} vary across different groups?"
             ]
         }
