@@ -249,7 +249,13 @@ else:
         with c2:
             ctx = st.session_state['domain_context']
             if ctx:
-                st.subheader("🧠 OpenAI Domain Resolution")
+                col_hdr, col_btn = st.columns([3, 1])
+                with col_hdr:
+                    st.subheader("\U0001f9e0 OpenAI Domain Resolution")
+                with col_btn:
+                    st.write("")
+                    if st.button("\U0001f504 Refresh", help="Refresh Phase 1 to reflect latest ML sweep results", use_container_width=True):
+                        st.rerun()
                 st.info(f"**Extrapolated Industry:** {ctx.get('industry', 'N/A')}")
                 st.success(f"**Identified Core ML Target:** `{ctx.get('target_variable', 'None')}`")
                 mlr_live = st.session_state.get('ml_results', {})
@@ -258,9 +264,9 @@ else:
                     m_name = mlr_live.get('metric_name', '')
                     m_score = mlr_live.get('best_score', 'N/A')
                     if task_t == 'classification':
-                        metric_display = f"{m_name}, F1-Score, ROC-AUC (Classification) — Best Score: {m_score}"
+                        metric_display = f"{m_name}, F1-Score, ROC-AUC (Classification) \u2014 Best Score: {m_score}"
                     else:
-                        metric_display = f"{m_name}, MAE, R² (Regression) — Best Score: {m_score}"
+                        metric_display = f"{m_name}, MAE, R\u00b2 (Regression) \u2014 Best Score: {m_score}"
                     st.warning(f"**Best Metric Strategy:** {metric_display}")
                 else:
                     st.warning(f"**Best Metric Strategy:** {ctx.get('evaluation_metric', 'N/A')} *(Run ML Sweep in Phase 3 to populate actual scores)*")
@@ -338,23 +344,29 @@ else:
                         if task_type == 'classification':
                             metric_str = f"{actual_metric}, F1-Score, ROC-AUC (Classification)"
                         else:
-                            metric_str = f"{actual_metric}, MAE, R² (Regression)"
+                            metric_str = f"{actual_metric}, MAE, R\u00b2 (Regression)"
                         st.session_state['domain_context']['evaluation_metric'] = metric_str
 
                     # Append ML steps to audit log
                     audit_log = st.session_state.get('pipeline_audit_log', [])
-                    next_n = len(audit_log) + 1
-                    leaderboard = res.get('leaderboard', [])
-                    models_run = [e.get('Model', '') for e in leaderboard]
-                    audit_log.append({"#": next_n, "Step": "Train/Test Split", "Detail": "Dataset split 80% training / 20% test (stratified where applicable)", "Status": "✅ Success"})
-                    next_n += 1
-                    audit_log.append({"#": next_n, "Step": "Algorithm Sweep", "Detail": f"{len(models_run)} model(s) trained: {', '.join(models_run)}", "Status": "✅ Success"})
-                    next_n += 1
-                    audit_log.append({"#": next_n, "Step": "Best Model Selection", "Detail": f"Best model: '{res.get('best_model_name','N/A')}' | {actual_metric}: {res.get('best_score', 'N/A')}", "Status": "✅ Success"})
-                    next_n += 1
-                    if res.get('feature_importance'):
-                        audit_log.append({"#": next_n, "Step": "Feature Importance Extraction", "Detail": f"{len(res['feature_importance'])} features ranked by contribution to '{target_col}'", "Status": "✅ Success"})
-                    st.session_state['pipeline_audit_log'] = audit_log
+                    # Guard: don't append ML steps more than once
+                    existing_steps = [e.get('Step', '') for e in audit_log]
+                    if 'Train/Test Split' not in existing_steps:
+                        next_n = len(audit_log) + 1
+                        leaderboard = res.get('leaderboard', [])
+                        models_run = [e.get('Model', '') for e in leaderboard]
+                        audit_log.append({"#": next_n, "Step": "Train/Test Split", "Detail": "Dataset split 80% training / 20% test (stratified where applicable)", "Status": "\u2705 Success"})
+                        next_n += 1
+                        audit_log.append({"#": next_n, "Step": "Algorithm Sweep", "Detail": f"{len(models_run)} model(s) trained: {', '.join(models_run)}", "Status": "\u2705 Success"})
+                        next_n += 1
+                        audit_log.append({"#": next_n, "Step": "Best Model Selection", "Detail": f"Best model: '{res.get('best_model_name','N/A')}' | {actual_metric}: {res.get('best_score', 'N/A')}", "Status": "\u2705 Success"})
+                        next_n += 1
+                        if res.get('feature_importance'):
+                            audit_log.append({"#": next_n, "Step": "Feature Importance Extraction", "Detail": f"{len(res['feature_importance'])} features ranked by contribution to '{target_col}'", "Status": "\u2705 Success"})
+                        st.session_state['pipeline_audit_log'] = audit_log
+
+                    # Auto-refresh entire app so Phase 1 reflects updated audit log & metric
+                    st.rerun()
 
                 except Exception as e:
                     st.error(f"Algorithm Sweep Failed: {e}")
