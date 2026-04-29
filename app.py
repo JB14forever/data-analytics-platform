@@ -251,7 +251,7 @@ else:
             if ctx:
                 col_hdr, col_btn = st.columns([3, 1])
                 with col_hdr:
-                    st.subheader("\U0001f9e0 OpenAI Domain Resolution")
+                    st.subheader("🧠 Domain Insights")
                 with col_btn:
                     st.write("")
                     if st.button("\U0001f504 Refresh", help="Refresh Phase 1 to reflect latest ML sweep results", use_container_width=True):
