@@ -56,6 +56,7 @@ for k, v in STATE_KEYS.items():
 # ==========================================
 # 3. Sidebar Configuration
 # ==========================================
+with st.sidebar:
     uploaded_file = st.file_uploader("Upload Dataset (CSV / XLXS)", type=["csv", "xlsx", "xls"])
     run_pipeline_btn = st.button("🚀 Execute Smart Pipeline", use_container_width=True)
     
