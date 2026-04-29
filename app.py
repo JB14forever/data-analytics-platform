@@ -262,11 +262,12 @@ else:
                 if mlr_live and mlr_live.get('metric_name'):
                     task_t = mlr_live.get('task_type', '')
                     m_name = mlr_live.get('metric_name', '')
-                    m_score = mlr_live.get('best_score', 'N/A')
+                    m_score = mlr_live.get('best_metric_value', 'N/A')
+                    m_score_fmt = f"{m_score:.4f}" if isinstance(m_score, float) else m_score
                     if task_t == 'classification':
-                        metric_display = f"{m_name}, F1-Score, ROC-AUC (Classification) \u2014 Best Score: {m_score}"
+                        metric_display = f"{m_name}, F1-Score, ROC-AUC (Classification) — Best Score: {m_score_fmt}"
                     else:
-                        metric_display = f"{m_name}, MAE, R\u00b2 (Regression) \u2014 Best Score: {m_score}"
+                        metric_display = f"{m_name}, MAE, R\u00b2 (Regression) — Best Score: {m_score_fmt}"
                     st.warning(f"**Best Metric Strategy:** {metric_display}")
                 else:
                     st.warning(f"**Best Metric Strategy:** {ctx.get('evaluation_metric', 'N/A')} *(Run ML Sweep in Phase 3 to populate actual scores)*")
@@ -359,7 +360,7 @@ else:
                         next_n += 1
                         audit_log.append({"#": next_n, "Step": "Algorithm Sweep", "Detail": f"{len(models_run)} model(s) trained: {', '.join(models_run)}", "Status": "\u2705 Success"})
                         next_n += 1
-                        audit_log.append({"#": next_n, "Step": "Best Model Selection", "Detail": f"Best model: '{res.get('best_model_name','N/A')}' | {actual_metric}: {res.get('best_score', 'N/A')}", "Status": "\u2705 Success"})
+                        audit_log.append({"#": next_n, "Step": "Best Model Selection", "Detail": f"Best model: '{res.get('best_model_name','N/A')}' | {actual_metric}: {res.get('best_metric_value', 0.0):.4f}", "Status": "\u2705 Success"})
                         next_n += 1
                         if res.get('feature_importance'):
                             audit_log.append({"#": next_n, "Step": "Feature Importance Extraction", "Detail": f"{len(res['feature_importance'])} features ranked by contribution to '{target_col}'", "Status": "\u2705 Success"})
