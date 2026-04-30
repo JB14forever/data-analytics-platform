@@ -10,6 +10,8 @@ from agents.transformation_agent import TransformationAgent
 from agents.ml_agent import MLAgent
 from agents.domain_agent import DomainAgent
 from agents.nlp_agent import NLPAgent
+from agents.graph_describer import GraphDescriber
+from agents.report_narrator import ReportNarrator
 
 from utils.pdf_generator import generate_pdf
 from utils.helpers import (
@@ -46,8 +48,13 @@ STATE_KEYS = {
     'pipeline_stage': 'Awaiting Data',
     'pipeline_audit_log': [],
     'file_format': '',
-    # Metadata
-    'author_name': ''
+    # LLM description caches
+    'eda_desc_cache': {},
+    'heatmap_desc_cache': '',
+    # Report configuration
+    'report_author': '',
+    'report_title': '',
+    'report_sections': {"profile": True, "cleaning": True, "eda": True, "ml": True, "insights": True, "conclusions": True},
 }
 
 for k, v in STATE_KEYS.items():
@@ -75,29 +82,7 @@ with st.sidebar:
     if st.session_state['pipeline_stage'] == 'Completed':
         st.divider()
         st.subheader("📥 Export Final Report")
-        
-        has_content = bool(st.session_state['eda_images_bytes'] or st.session_state['saved_nlp_queries'] or st.session_state.get('ml_results'))
-        
-        if not has_content:
-            if st.button("Download Complete PDF", use_container_width=True):
-                st.error("⚠️ Nothing is appended to the report as of now. Please add insights from the tabs to generate a comprehensive report.")
-        else:
-            with st.spinner("Generating PDF Profile..."):
-                pdf_b = generate_pdf(
-                    dataset_name=uploaded_file.name if uploaded_file else "Data",
-                    domain_context=st.session_state['domain_context'],
-                    cleaning_logs=st.session_state['cleaning_logs'],
-                    ml_results=st.session_state['ml_results'],
-                    eda_images=st.session_state['eda_images_bytes'],
-                    saved_queries=st.session_state['saved_nlp_queries']
-                )
-            st.download_button(
-                label="Download Complete PDF",
-                data=pdf_b,
-                file_name="Automated_Analytics_Report.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        st.info("Head over to the **Report Architect** tab to configure, generate, and download your consulting-grade PDF report.")
 
 # ==========================================
 # Execution Engine Pipeline
@@ -312,20 +297,52 @@ else:
                 fig_hist = df_to_plotly_histogram(st.session_state['clean_df'], s_col)
                 st.plotly_chart(fig_hist, use_container_width=True)
                 
+                # Dynamic LLM Description for Histogram
+                if s_col not in st.session_state['eda_desc_cache']:
+                    with st.spinner("Generating AI description..."):
+                        describer = GraphDescriber()
+                        desc = describer.describe_distribution(
+                            st.session_state['clean_df'], 
+                            s_col, 
+                            st.session_state.get('domain_context')
+                        )
+                        st.session_state['eda_desc_cache'][s_col] = desc
+                
+                if st.session_state['eda_desc_cache'].get(s_col):
+                    st.info(f"**AI Analyst Insight:** {st.session_state['eda_desc_cache'][s_col]}")
+                
                 if st.button(f"📸 Add {s_col} Distribution to Report"):
                     img_bytes = plotly_to_image_bytes(fig_hist)
                     if img_bytes:
                         st.session_state['eda_images_bytes'].append(img_bytes)
+                        # Store description keyed by index to align with images list
+                        idx = len(st.session_state['eda_images_bytes']) - 1
+                        st.session_state[f'eda_desc_queued_{idx}'] = st.session_state['eda_desc_cache'].get(s_col, "")
                         st.success("Graph Captured!")
                         
         st.divider()
         st.subheader("Macro Correlations")
         fig_heat = df_to_plotly_heatmap(st.session_state['clean_df'])
         st.plotly_chart(fig_heat, use_container_width=True)
+        
+        # Dynamic LLM Description for Heatmap
+        if not st.session_state['heatmap_desc_cache']:
+            with st.spinner("Analyzing correlations..."):
+                describer = GraphDescriber()
+                st.session_state['heatmap_desc_cache'] = describer.describe_heatmap(
+                    st.session_state['clean_df'], 
+                    st.session_state.get('domain_context')
+                )
+                
+        if st.session_state['heatmap_desc_cache']:
+            st.info(f"**AI Analyst Insight:** {st.session_state['heatmap_desc_cache']}")
+            
         if st.button("📸 Add Heatmap to Report"):
             h_bytes = plotly_to_image_bytes(fig_heat)
             if h_bytes:
                 st.session_state['eda_images_bytes'].append(h_bytes)
+                idx = len(st.session_state['eda_images_bytes']) - 1
+                st.session_state[f'eda_desc_queued_{idx}'] = st.session_state['heatmap_desc_cache']
                 st.success("Heatmap Captured!")
 
     # -------------------------------------
@@ -412,8 +429,8 @@ else:
     # TAB 4: NLP Semantic Query API
     # -------------------------------------
     with t4:
-        st.subheader("Semantic English-to-Graph Generation")
-        st.markdown("Talk directly to your dataset. The system filters it safely behind the scenes.")
+        st.subheader("Intelligent Natural Language Querying")
+        st.markdown("Ask questions in plain English. The AI will choose the best chart type, filter the data, and provide data-driven insights.")
         
         sugg = st.session_state['domain_context'].get('suggested_queries', [])
         if sugg:
@@ -421,63 +438,107 @@ else:
             for s in sugg:
                 st.markdown(f"- _{s}_")
                 
-        user_q = st.text_input("What do you want to see? (e.g., 'Chart revenue by user segments')")
+        user_q = st.text_input("What do you want to see? (e.g., 'Show me the revenue breakdown by region')")
         
-        if st.button("Execute Natural Language") and user_q:
+        if st.button("Generate Insight") and user_q:
             nlp = NLPAgent()
-            with st.spinner("Processing semantics..."):
-                response = nlp.query(user_q, st.session_state['clean_df'], st.session_state['clean_df'].columns.tolist())
+            with st.spinner("Analyzing intent and generating visualization..."):
+                response = nlp.query(
+                    user_q, 
+                    st.session_state['clean_df'], 
+                    st.session_state['clean_df'].columns.tolist(),
+                    st.session_state.get('domain_context')
+                )
                 
-                if 'error' in response:
+                if 'error' in response and response['error']:
                     st.error(response['error'])
                 else:
                     fc = response.get('filter_code')
                     ct = response.get('chart_type')
+                    cfg = response.get('chart_config', {})
                     
                     df_v = apply_nlp_filter(st.session_state['clean_df'], fc)
-                    st.code(fc if fc else "No sub-filtering applied.", language='python')
                     
                     current_fig = None
                     if ct:
                         from plotly import express as pxe
                         from utils.helpers import get_minimalist_layout
                         try:
-                            # Heuristic assignments for axis
-                            c_x = df_v.columns[0]
-                            c_y = df_v.columns[1] if len(df_v.columns) > 1 else c_x
+                            # Use LLM-provided config or fallback to first columns
+                            c_x = cfg.get('x') or df_v.columns[0]
+                            c_y = cfg.get('y') or (df_v.columns[1] if len(df_v.columns) > 1 else None)
+                            c_color = cfg.get('color')
+                            
+                            kwargs = {}
+                            if c_x in df_v.columns: kwargs['x'] = c_x
+                            if c_y and c_y in df_v.columns: kwargs['y'] = c_y
+                            if c_color and c_color in df_v.columns: kwargs['color'] = c_color
                             
                             c_t = ct.lower()
-                            if c_t == 'bar':
-                                current_fig = pxe.bar(df_v, x=c_x, y=c_y)
-                            elif c_t == 'histogram':
-                                current_fig = pxe.histogram(df_v, x=c_x)
-                            elif c_t == 'line':
-                                current_fig = pxe.line(df_v, x=c_x, y=c_y)
-                            elif c_t == 'scatter':
-                                current_fig = pxe.scatter(df_v, x=c_x, y=c_y)
-                            elif c_t == 'box':
-                                current_fig = pxe.box(df_v, x=c_x)
+                            if c_t == 'bar': current_fig = pxe.bar(df_v, **kwargs)
+                            elif c_t == 'histogram': current_fig = pxe.histogram(df_v, **kwargs)
+                            elif c_t == 'line': current_fig = pxe.line(df_v, **kwargs)
+                            elif c_t == 'scatter': current_fig = pxe.scatter(df_v, **kwargs)
+                            elif c_t == 'box': current_fig = pxe.box(df_v, **kwargs)
+                            elif c_t == 'violin': current_fig = pxe.violin(df_v, box=True, points="all", **kwargs)
+                            elif c_t == 'pie':
+                                if c_y and c_y in df_v.columns:
+                                    current_fig = pxe.pie(df_v, values=c_y, names=c_x)
+                                else:
+                                    # Fallback for pie without values
+                                    counts = df_v[c_x].value_counts().reset_index()
+                                    counts.columns = [c_x, 'count']
+                                    current_fig = pxe.pie(counts, values='count', names=c_x)
+                            elif c_t == 'treemap':
+                                current_fig = pxe.treemap(df_v, path=[c_x], values=c_y if c_y in df_v.columns else None)
+                            elif c_t == 'area': current_fig = pxe.area(df_v, **kwargs)
+                            elif c_t == 'funnel': current_fig = pxe.funnel(df_v, **kwargs)
+                            else:
+                                # Fallback
+                                current_fig = pxe.bar(df_v, x=df_v.columns[0], y=df_v.columns[1] if len(df_v.columns)>1 else None)
                                 
                             if current_fig:
-                                current_fig.update_layout(**get_minimalist_layout())
+                                # Apply titles and labels from LLM
+                                layout_updates = get_minimalist_layout()
+                                if cfg.get('title'):
+                                    layout_updates['title_text'] = cfg.get('title')
+                                if cfg.get('labels'):
+                                    current_fig.update_layout(xaxis_title=cfg['labels'].get(c_x, c_x))
+                                    if c_y: current_fig.update_layout(yaxis_title=cfg['labels'].get(c_y, c_y))
+                                if cfg.get('legend_title'):
+                                    current_fig.update_layout(legend_title_text=cfg.get('legend_title'))
+                                    
+                                current_fig.update_layout(**layout_updates)
                                 st.plotly_chart(current_fig, use_container_width=True)
+                                
+                                # Show AI insights
+                                if response.get('figure_description'):
+                                    st.caption(f"**Figure Description:** {response['figure_description']}")
+                                if response.get('data_narrative'):
+                                    st.info(f"**Data Narrative:** {response['data_narrative']}")
+                                    
                         except Exception as e:
-                            st.warning(f"Could not map chart cleanly: {e}")
-                            
-                    st.dataframe(df_v.head(20))
+                            st.warning(f"Could not render {ct} chart cleanly. Showing data table instead. (Error: {e})")
+                            st.dataframe(df_v.head(20))
+                    else:
+                        st.dataframe(df_v.head(20))
+                        if response.get('data_narrative'):
+                            st.info(f"**Data Narrative:** {response['data_narrative']}")
                     
                     # Store temporally
                     st.session_state['_last_nlp'] = {
                         'question': user_q,
                         'filter_logic': fc,
-                        'current_fig': current_fig
+                        'current_fig': current_fig,
+                        'figure_description': response.get('figure_description', ''),
+                        'data_narrative': response.get('data_narrative', '')
                     }
                     
         # Check if there's a recent query to pin
         if '_last_nlp' in st.session_state:
             recent = st.session_state['_last_nlp']
             st.divider()
-            if st.button("📌 Include This Specific Insight String in Final PDF"):
+            if st.button("📌 Include This Insight in Final PDF"):
                 fig_bytes = None
                 if recent.get('current_fig'):
                     fig_bytes = plotly_to_image_bytes(recent['current_fig'])
@@ -485,7 +546,9 @@ else:
                 st.session_state['saved_nlp_queries'].append({
                     'question': recent['question'],
                     'filter_logic': recent['filter_logic'],
-                    'image_bytes': fig_bytes
+                    'image_bytes': fig_bytes,
+                    'figure_description': recent.get('figure_description', ''),
+                    'data_narrative': recent.get('data_narrative', '')
                 })
                 # clear active slot so we don't accidentally save twice
                 del st.session_state['_last_nlp'] 
@@ -495,12 +558,100 @@ else:
     # TAB 5: Report Preview Architect
     # -------------------------------------
     with t5:
-        st.subheader("A4 Export Verification")
-        st.markdown("Ensure your arrays are populated before rendering the actual PDF.")
-        st.write(f"**Queued EDA Graphics:** {len(st.session_state['eda_images_bytes'])} snapshots.")
-        st.write(f"**Pinned Sentences/Queries:** {len(st.session_state['saved_nlp_queries'])} slots.")
+        st.subheader("Consulting-Grade Report Architect")
+        st.markdown("Configure and generate your final analytical deliverable.")
         
-        if st.session_state['ml_results']:
-            st.write("✅ Machine Learning Models loaded.")
-        else:
-            st.write("❌ No ML Algorithm executed yet.")
+        col_meta, col_opts = st.columns([1, 1])
+        with col_meta:
+            st.session_state['report_title'] = st.text_input("Report Title (Optional)", value=st.session_state.get('report_title', ''), help="Leave blank for AI-generated title")
+            st.session_state['report_author'] = st.text_input("Author Name (Optional)", value=st.session_state.get('report_author', ''))
+            
+            st.markdown("### Included Content")
+            st.write(f"- **EDA Graphics:** {len(st.session_state['eda_images_bytes'])} snapshots")
+            st.write(f"- **Pinned NLP Insights:** {len(st.session_state['saved_nlp_queries'])} slots")
+            st.write(f"- **ML Models:** {'Loaded ✅' if st.session_state['ml_results'] else 'Not Run ❌'}")
+            
+        with col_opts:
+            st.markdown("### Section Configuration")
+            # Toggles for each section
+            rs = st.session_state['report_sections']
+            rs['profile'] = st.checkbox("1. Data Profile & Health", value=rs['profile'])
+            rs['cleaning'] = st.checkbox("2. Cleaning Narrative", value=rs['cleaning'])
+            rs['eda'] = st.checkbox("3. Exploratory Data Analysis", value=rs['eda'])
+            rs['ml'] = st.checkbox("4. Predictive Modeling", value=rs['ml'], disabled=not bool(st.session_state['ml_results']))
+            rs['insights'] = st.checkbox("5. Analyst Insights (NLP)", value=rs['insights'], disabled=len(st.session_state['saved_nlp_queries'])==0)
+            rs['conclusions'] = st.checkbox("6. Conclusions & Recommendations", value=rs['conclusions'])
+            
+        st.divider()
+        
+        has_content = bool(st.session_state['eda_images_bytes'] or st.session_state['saved_nlp_queries'] or st.session_state.get('ml_results'))
+        
+        if st.button("📄 Generate & Download Consulting PDF", use_container_width=True, type="primary"):
+            if not has_content:
+                st.warning("⚠️ Very little content has been generated. The report will mostly contain templates. Generating anyway...")
+                
+            with st.spinner("AI Agents drafting report narratives... This takes 10-20 seconds."):
+                narrator = ReportNarrator()
+                ctx = st.session_state.get('domain_context', {})
+                dname = "Dataset" if 'raw_df' not in st.session_state else "Analyzed Dataset" # Fallback if no file uploaded yet
+                
+                # Extract queued EDA descriptions
+                eda_desc = {}
+                for i in range(len(st.session_state['eda_images_bytes'])):
+                    k = f'eda_desc_queued_{i}'
+                    if k in st.session_state:
+                        eda_desc[f'eda_{i}'] = st.session_state[k]
+                
+                # Only generate text for enabled sections to save time/tokens
+                title = st.session_state['report_title'] or narrator.generate_report_title(ctx, dname)
+                
+                exec_sum = narrator.generate_executive_summary(ctx, st.session_state['ml_results'], st.session_state['cleaning_logs'], dname)
+                
+                clean_nar = ""
+                if rs['cleaning']:
+                    clean_nar = narrator.generate_cleaning_narrative(st.session_state['cleaning_logs'])
+                    
+                ml_interp = ""
+                if rs['ml'] and st.session_state['ml_results']:
+                    ml_interp = narrator.generate_ml_interpretation(st.session_state['ml_results'], ctx)
+                    
+                conclusions = ""
+                if rs['conclusions']:
+                    conclusions = narrator.generate_conclusions(ctx, st.session_state['ml_results'], st.session_state['saved_nlp_queries'])
+                
+                # Fetch row/col counts
+                r_count = st.session_state['raw_df'].shape[0] if st.session_state['raw_df'] is not None else 0
+                c_count = st.session_state['clean_df'].shape[0] if st.session_state['clean_df'] is not None else 0
+                cc_count = st.session_state['clean_df'].shape[1] if st.session_state['clean_df'] is not None else 0
+
+                pdf_b = generate_pdf(
+                    dataset_name=dname,
+                    domain_context=ctx,
+                    cleaning_logs=st.session_state['cleaning_logs'],
+                    ml_results=st.session_state['ml_results'],
+                    eda_images=st.session_state['eda_images_bytes'],
+                    saved_queries=st.session_state['saved_nlp_queries'],
+                    report_title=title,
+                    author_name=st.session_state['report_author'],
+                    executive_summary=exec_sum,
+                    cleaning_narrative=clean_nar,
+                    ml_interpretation=ml_interp,
+                    conclusions_text=conclusions,
+                    eda_descriptions=eda_desc,
+                    heatmap_description=st.session_state.get('heatmap_desc_cache', ''),
+                    health_score=st.session_state.get('health_score', 0.0),
+                    pipeline_audit_log=st.session_state.get('pipeline_audit_log', []),
+                    enabled_sections=rs,
+                    raw_row_count=r_count,
+                    clean_row_count=c_count,
+                    clean_col_count=cc_count
+                )
+                
+            st.download_button(
+                label="📥 Download Ready",
+                data=pdf_b,
+                file_name="Automated_Analytics_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="secondary"
+            )

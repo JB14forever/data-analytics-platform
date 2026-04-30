@@ -4,26 +4,50 @@ import datetime
 from fpdf import FPDF
 import io
 
+
 def generate_pdf(
-    dataset_name: str, 
-    domain_context: dict, 
-    cleaning_logs: dict, 
-    ml_results: dict, 
-    eda_images: list, 
-    saved_queries: list
+    dataset_name: str,
+    domain_context: dict,
+    cleaning_logs,
+    ml_results: dict,
+    eda_images: list,
+    saved_queries: list,
+    report_title: str = "",
+    author_name: str = "",
+    executive_summary: str = "",
+    cleaning_narrative: str = "",
+    ml_interpretation: str = "",
+    conclusions_text: str = "",
+    eda_descriptions: dict = None,
+    heatmap_description: str = "",
+    schema_info: dict = None,
+    health_score: float = 0.0,
+    pipeline_audit_log: list = None,
+    enabled_sections: dict = None,
+    raw_row_count: int = 0,
+    clean_row_count: int = 0,
+    clean_col_count: int = 0,
 ) -> bytes:
     """
-    Generates a highly structured, standard A4 PDF analytics report.
+    Generates a professional, template-driven A4 PDF analytics report.
     """
+    if eda_descriptions is None:
+        eda_descriptions = {}
+    if pipeline_audit_log is None:
+        pipeline_audit_log = []
+    if enabled_sections is None:
+        enabled_sections = {"profile": True, "cleaning": True, "eda": True, "ml": True, "insights": True, "conclusions": True}
+
+    final_title = report_title or f"{dataset_name} — Analytical Report"
+
     class PDF(FPDF):
         def header(self):
-            # No header on first page
             if self.page_no() > 1:
                 self.set_font("Helvetica", "I", 8)
                 self.set_text_color(150, 150, 150)
-                self.cell(0, 10, f"{dataset_name} Analytics Report", border=False, align="R")
+                self.cell(0, 10, f"{final_title}", border=False, align="R")
                 self.ln(10)
-            
+
         def footer(self):
             self.set_y(-15)
             self.set_font("Helvetica", "I", 8)
@@ -31,174 +55,310 @@ def generate_pdf(
             self.cell(0, 10, f"Page {self.page_no()}", align="C")
 
     pdf = PDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.add_page()
-    
-    # ---------------------------------------------------------
-    # TITLE PAGE
-    # ---------------------------------------------------------
-    pdf.set_y(60)
-    pdf.set_font("Helvetica", "B", 26)
-    pdf.set_text_color(44, 62, 80)
-    pdf.cell(0, 15, "Data Analytics Report", ln=True, align="C")
-    
-    pdf.set_font("Helvetica", "", 16)
-    pdf.cell(0, 10, "JB Data Explorer Platform Insights", ln=True, align="C")
-    pdf.ln(20)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_text_color(52, 73, 94)
-    # Metadata Block
-    left_margin = 50
-    pdf.set_x(left_margin)
-    pdf.cell(40, 8, "Dataset Name:", border=0)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, dataset_name, ln=True)
-    
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_x(left_margin)
-    pdf.cell(40, 8, "Generated On:", border=0)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 8, datetime.datetime.now().strftime("%B %d, %Y - %H:%M"), ln=True)
-    
-    # Context Block
-    if domain_context:
-        pdf.ln(15)
-        pdf.set_left_margin(15)
-        pdf.set_x(15)
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(180, 10, "Domain Context", ln=True, align="C")
-        pdf.set_font("Helvetica", "", 11)
-        
-        ind = str(domain_context.get('industry', 'General Business'))
-        bs = str(domain_context.get('business_summary', 'None Provided')).strip()
-        
-        pdf.multi_cell(180, 6, f"Industry: {ind}", align="C")
-        pdf.multi_cell(180, 6, bs, align="C")
+    pdf.set_auto_page_break(auto=True, margin=20)
 
-    # ---------------------------------------------------------
-    # SECTION 1: DATA CLEANING LOGS
-    # ---------------------------------------------------------
-    pdf.add_page()
-    pdf.set_left_margin(15)
-    pdf.set_x(15)
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_text_color(44, 62, 80)
-    pdf.cell(180, 15, "1. Data Cleaning Narrative", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-    
-    pdf.multi_cell(180, 6, "The dataset was subjected to a rigorous 12-step cleaning architecture, assessing missingness, enforcing distribution bounds via Winsorization, and filtering uninformative primary keys.")
-    pdf.ln(5)
-    
-    if cleaning_logs:
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(180, 8, "Variables Dropped/Filtered:", ln=True)
+    # ── Helper functions ──
+    def section_heading(title):
+        pdf.set_font("Helvetica", "B", 16)
+        pdf.set_text_color(44, 62, 80)
+        pdf.cell(180, 12, title, ln=True)
+        pdf.set_draw_color(52, 152, 219)
+        pdf.set_line_width(0.8)
+        pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 180, pdf.get_y())
+        pdf.ln(6)
+
+    def body_text(text):
         pdf.set_font("Helvetica", "", 10)
-        if isinstance(cleaning_logs, list):
-            for log in cleaning_logs:
-                action = log.get("Column/Action", "Action")
-                reason = log.get("Decision Justification", log.get("Reason", "No justification provided."))
-                pdf.multi_cell(180, 6, f"- [{action}]: {reason}")
-        elif isinstance(cleaning_logs, dict):
-            for col, reason in cleaning_logs.items():
-                pdf.multi_cell(180, 6, f"- [{col}]: {reason}")
-    else:
-        pdf.multi_cell(180, 6, "No severe structural anomalies were detected requiring column deletion.")
-        
-    pdf.ln(10)
-    
-    # ---------------------------------------------------------
-    # SECTION 2: EXPLORATORY DATA ANALYSIS
-    # ---------------------------------------------------------
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(180, 10, "2. Exploratory Visualizations", ln=True)
-    
-    if eda_images:
-        for img_bytes in eda_images:
-            if img_bytes:
-                img_io = io.BytesIO(img_bytes)
-                pdf.image(img_io, w=180)
-                pdf.ln(10)
-    else:
-        pdf.set_font("Helvetica", "", 11)
-        pdf.cell(180, 8, "No visual distributions were selected for the report.", ln=True)
-        
-    pdf.add_page()
-    pdf.set_left_margin(15)
-    pdf.set_x(15)
-    # ---------------------------------------------------------
-    # SECTION 3: MACHINE LEARNING LEADERBOARD
-    # ---------------------------------------------------------
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(180, 10, "3. Predictive Core Results", ln=True)
-    
-    if ml_results.get('leaderboard'):
-        pdf.set_font("Helvetica", "", 11)
-        target = domain_context.get('target_variable', 'Unknown Target') if domain_context else 'Target'
-        task = ml_results.get('task_type', 'N/A').title()
-        pdf.multi_cell(180, 6, f"An automated {task} sweep was conducted predicting '{target}'. The leaderboard reflects hold-out testing performance.")
-        pdf.ln(5)
-        
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(180, 8, "Model Leaderboard", ln=True)
+        pdf.set_text_color(60, 60, 60)
+        safe = text.encode('latin-1', 'replace').decode('latin-1') if text else ""
+        pdf.multi_cell(180, 5.5, safe)
+        pdf.ln(3)
+
+    def boilerplate(text):
+        pdf.set_font("Helvetica", "I", 10)
+        pdf.set_text_color(100, 100, 100)
+        safe = text.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(180, 5.5, safe)
+        pdf.ln(3)
+
+    def label_value(label, value):
         pdf.set_font("Helvetica", "B", 10)
-        
-        # Table Header
-        col_w = 90
-        pdf.cell(col_w, 8, "Algorithm", border=1)
-        pdf.cell(col_w, 8, ml_results.get('metric_name', 'Score'), border=1)
-        pdf.ln()
-        
+        pdf.set_text_color(44, 62, 80)
+        pdf.cell(50, 7, label, border=0)
         pdf.set_font("Helvetica", "", 10)
-        for entry in ml_results.get('leaderboard', []):
-            pdf.cell(col_w, 8, str(entry.get('Model')), border=1)
-            pdf.cell(col_w, 8, f"{entry.get(ml_results.get('metric_name', 'Accuracy'), 0):.4f}", border=1)
-            pdf.ln()
+        pdf.set_text_color(60, 60, 60)
+        safe = str(value).encode('latin-1', 'replace').decode('latin-1')
+        pdf.cell(130, 7, safe, ln=True)
 
-        pdf.ln(10)
-        
-        if ml_results.get('feature_importance'):
+    def table_header(cols, widths):
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_fill_color(44, 62, 80)
+        pdf.set_text_color(255, 255, 255)
+        for c, w in zip(cols, widths):
+            pdf.cell(w, 8, c, border=1, fill=True, align="C")
+        pdf.ln()
+        pdf.set_text_color(60, 60, 60)
+
+    def table_row(vals, widths):
+        pdf.set_font("Helvetica", "", 9)
+        for v, w in zip(vals, widths):
+            safe = str(v)[:int(w/2)].encode('latin-1', 'replace').decode('latin-1')
+            pdf.cell(w, 7, safe, border=1)
+        pdf.ln()
+
+    # ═══════════════════════════════════════════
+    # COVER PAGE
+    # ═══════════════════════════════════════════
+    pdf.add_page()
+
+    # Header band
+    pdf.set_fill_color(44, 62, 80)
+    pdf.rect(0, 0, 210, 45, 'F')
+    pdf.set_y(12)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(0, 8, "JB DATA EXPLORER", align="C", ln=True)
+    pdf.set_font("Helvetica", "", 9)
+    pdf.cell(0, 6, "Automated Analytics Platform", align="C", ln=True)
+
+    # Title
+    pdf.set_y(70)
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_text_color(44, 62, 80)
+    safe_title = final_title.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 12, safe_title, align="C")
+    pdf.ln(15)
+
+    # Metadata block
+    left = 50
+    pdf.set_x(left)
+    label_value("Dataset:", dataset_name)
+    pdf.set_x(left)
+    label_value("Generated:", datetime.datetime.now().strftime("%B %d, %Y - %H:%M"))
+    if author_name:
+        pdf.set_x(left)
+        label_value("Author:", author_name)
+    if domain_context:
+        pdf.set_x(left)
+        label_value("Industry:", domain_context.get('industry', 'General'))
+        pdf.set_x(left)
+        label_value("Target Variable:", domain_context.get('target_variable', 'N/A'))
+
+    # Executive Summary
+    if executive_summary:
+        pdf.ln(15)
+        pdf.set_font("Helvetica", "B", 13)
+        pdf.set_text_color(44, 62, 80)
+        pdf.cell(0, 10, "Executive Summary", ln=True, align="C")
+        pdf.ln(3)
+        body_text(executive_summary)
+
+    # ═══════════════════════════════════════════
+    # SECTION 1: DATA PROFILE & HEALTH
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("profile", True):
+        pdf.add_page()
+        section_heading("1. Data Profile & Health Assessment")
+
+        boilerplate("This section presents the structural profile of the ingested dataset, including data types, completeness metrics, and an algorithmic health assessment. The health score is computed based on missing values, duplicates, and dominant-value prevalence.")
+        pdf.ln(3)
+
+        label_value("Total Raw Rows:", str(raw_row_count))
+        label_value("Clean Rows:", str(clean_row_count))
+        label_value("Features:", str(clean_col_count))
+        label_value("Health Score:", f"{health_score}/100")
+        pdf.ln(5)
+
+        if domain_context:
             pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(180, 8, "Top 10 Feature Importances", ln=True)
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.cell(90, 8, "Feature", border=1)
-            pdf.cell(90, 8, "Relative Importance", border=1)
-            pdf.ln()
-            
-            pdf.set_font("Helvetica", "", 10)
-            for feat, score in ml_results.get('feature_importance', {}).items():
-                pdf.cell(90, 8, str(feat)[:40], border=1)
-                pdf.cell(90, 8, f"{score:.4f}", border=1)
-                pdf.ln()
-    else:
-        pdf.set_font("Helvetica", "", 11)
-        pdf.cell(180, 8, "No models were computed.", ln=True)
-        
-    pdf.ln(10)
+            pdf.set_text_color(44, 62, 80)
+            pdf.cell(180, 8, "Domain Context", ln=True)
+            body_text(f"Industry: {domain_context.get('industry', 'N/A')}")
+            bs = domain_context.get('business_summary', '')
+            if bs:
+                body_text(bs)
 
-    # ---------------------------------------------------------
-    # SECTION 4: NLP SAVED QUERIES
-    # ---------------------------------------------------------
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.cell(180, 10, "4. Derived Analyst Insights", ln=True)
-    pdf.set_font("Helvetica", "", 11)
-    
-    if saved_queries:
-        for idx, sq in enumerate(saved_queries):
+    # ═══════════════════════════════════════════
+    # SECTION 2: DATA CLEANING
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("cleaning", True):
+        pdf.add_page()
+        section_heading("2. Data Cleaning Narrative")
+
+        boilerplate("The dataset was subjected to a rigorous multi-step cleaning architecture encompassing column standardization, data type correction, duplicate removal, missing value imputation (mean/median/mode based on distribution skewness), IQR-based outlier winsorization, and domain-specific range validation.")
+
+        if cleaning_narrative:
+            pdf.ln(2)
+            body_text(cleaning_narrative)
+
+        if cleaning_logs:
+            pdf.ln(3)
             pdf.set_font("Helvetica", "B", 11)
-            pdf.multi_cell(180, 8, f"Query {idx+1}: {sq.get('question', '')}")
-            pdf.set_font("Helvetica", "", 10)
-            
-            if sq.get('filter_logic'):
-                pdf.multi_cell(180, 6, f"Data Subspace Definition: {sq['filter_logic']}")
-                
-            q_img = sq.get('image_bytes')
-            if q_img:
-                pdf.ln(3)
-                pdf.image(io.BytesIO(q_img), w=160)
-            pdf.ln(10)
-    else:
-        pdf.multi_cell(180, 8, "No natural language queries were attached to this report.")
+            pdf.set_text_color(44, 62, 80)
+            pdf.cell(180, 8, "Cleaning Decisions Log", ln=True)
+
+            if isinstance(cleaning_logs, list):
+                widths = [60, 120]
+                table_header(["Action", "Justification"], widths)
+                for log in cleaning_logs:
+                    action = str(log.get("Column/Action", ""))
+                    reason = str(log.get("Decision Justification", ""))
+                    table_row([action, reason], widths)
+            elif isinstance(cleaning_logs, dict):
+                widths = [60, 120]
+                table_header(["Column", "Reason"], widths)
+                for col, reason in cleaning_logs.items():
+                    table_row([col, reason], widths)
+
+    # ═══════════════════════════════════════════
+    # SECTION 3: EXPLORATORY DATA ANALYSIS
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("eda", True):
+        pdf.add_page()
+        section_heading("3. Exploratory Data Analysis")
+
+        boilerplate("The following visualizations capture the statistical distributions and inter-feature relationships within the cleaned dataset. Each chart is accompanied by an AI-generated analytical description highlighting key patterns, central tendencies, and anomalies relevant to the identified domain.")
+
+        if eda_images:
+            for i, img_bytes in enumerate(eda_images):
+                if img_bytes:
+                    if pdf.get_y() > 180:
+                        pdf.add_page()
+                    try:
+                        img_io = io.BytesIO(img_bytes)
+                        pdf.image(img_io, w=170)
+                    except Exception:
+                        pass
+                    # Add description if available
+                    desc_key = f"eda_{i}"
+                    if desc_key in eda_descriptions:
+                        pdf.ln(3)
+                        body_text(eda_descriptions[desc_key])
+                    pdf.ln(8)
+        else:
+            body_text("No visual distributions were selected for the report.")
+
+        if heatmap_description:
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(180, 8, "Correlation Analysis Interpretation", ln=True)
+            body_text(heatmap_description)
+
+    # ═══════════════════════════════════════════
+    # SECTION 4: PREDICTIVE MODELING
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("ml", True):
+        pdf.add_page()
+        section_heading("4. Predictive Modeling Results")
+
+        boilerplate("An automated machine learning sweep was conducted across multiple algorithm families including tree-based ensembles, linear models, and support vector machines. Each model was evaluated on a stratified 80/20 train-test split with performance measured using industry-standard metrics.")
+
+        if ml_results and ml_results.get('leaderboard'):
+            target = domain_context.get('target_variable', 'Target') if domain_context else 'Target'
+            task = ml_results.get('task_type', 'N/A').title()
+            body_text(f"Task Type: {task}. Target Variable: '{target}'. Best Model: {ml_results.get('best_model_name', 'N/A')} ({ml_results.get('metric_name', '')}: {ml_results.get('best_metric_value', 0):.4f}).")
+
+            pdf.ln(3)
+            pdf.set_font("Helvetica", "B", 11)
+            pdf.cell(180, 8, "Model Leaderboard", ln=True)
+
+            widths = [90, 90]
+            table_header(["Algorithm", ml_results.get('metric_name', 'Score')], widths)
+            for entry in ml_results.get('leaderboard', []):
+                model_name = str(entry.get('Model', ''))
+                score = entry.get(ml_results.get('metric_name', 'Accuracy'), 0)
+                score_str = f"{score:.4f}" if isinstance(score, (int, float)) else str(score)
+                table_row([model_name, score_str], widths)
+
+            if ml_results.get('feature_importance'):
+                pdf.ln(8)
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(180, 8, "Feature Importance Ranking", ln=True)
+                widths = [90, 90]
+                table_header(["Feature", "Importance"], widths)
+                for feat, score in ml_results.get('feature_importance', {}).items():
+                    table_row([str(feat)[:40], f"{score:.4f}"], widths)
+
+            if ml_interpretation:
+                pdf.ln(5)
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.cell(180, 8, "Model Interpretation", ln=True)
+                body_text(ml_interpretation)
+        else:
+            body_text("No machine learning models were computed for this analysis.")
+
+    # ═══════════════════════════════════════════
+    # SECTION 5: ANALYST INSIGHTS
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("insights", True):
+        pdf.add_page()
+        section_heading("5. Natural Language Analyst Insights")
+
+        boilerplate("This section contains insights derived from natural language queries posed against the dataset. Each query was processed by an AI agent that selected the optimal visualization type, generated appropriate chart configurations, and produced contextual data narratives.")
+
+        if saved_queries:
+            for idx, sq in enumerate(saved_queries):
+                if pdf.get_y() > 200:
+                    pdf.add_page()
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.set_text_color(44, 62, 80)
+                q_text = str(sq.get('question', '')).encode('latin-1', 'replace').decode('latin-1')
+                pdf.multi_cell(180, 7, f"Query {idx+1}: {q_text}")
+
+                # Figure description
+                fig_desc = sq.get('figure_description', '')
+                if fig_desc:
+                    pdf.set_font("Helvetica", "I", 9)
+                    pdf.set_text_color(80, 80, 80)
+                    safe_desc = fig_desc.encode('latin-1', 'replace').decode('latin-1')
+                    pdf.multi_cell(180, 5, safe_desc)
+
+                # Chart image
+                q_img = sq.get('image_bytes')
+                if q_img:
+                    pdf.ln(3)
+                    try:
+                        pdf.image(io.BytesIO(q_img), w=160)
+                    except Exception:
+                        pass
+
+                # Data narrative
+                narrative = sq.get('data_narrative', '')
+                if narrative:
+                    pdf.ln(3)
+                    body_text(narrative)
+
+                pdf.ln(8)
+        else:
+            body_text("No natural language queries were attached to this report.")
+
+    # ═══════════════════════════════════════════
+    # SECTION 6: CONCLUSIONS
+    # ═══════════════════════════════════════════
+    if enabled_sections.get("conclusions", True):
+        pdf.add_page()
+        section_heading("6. Conclusions & Recommendations")
+
+        boilerplate("The following conclusions are synthesized from the complete analytical pipeline — spanning data profiling, cleaning, exploratory analysis, predictive modeling, and ad-hoc query insights.")
+
+        if conclusions_text:
+            body_text(conclusions_text)
+        else:
+            body_text("No automated conclusions were generated. Consider running the full pipeline and adding insights to populate this section.")
+
+    # ═══════════════════════════════════════════
+    # APPENDIX: PIPELINE AUDIT LOG
+    # ═══════════════════════════════════════════
+    if pipeline_audit_log:
+        pdf.add_page()
+        section_heading("Appendix: Pipeline Execution Audit")
+
+        boilerplate("Complete trace of every step executed by the automated pipeline, from initial file ingestion through to model selection.")
+
+        widths = [12, 55, 90, 23]
+        table_header(["#", "Step", "Detail", "Status"], widths)
+        for row in pipeline_audit_log:
+            table_row([str(row.get('#', '')), str(row.get('Step', '')), str(row.get('Detail', '')), str(row.get('Status', ''))], widths)
 
     try:
         return bytes(pdf.output())

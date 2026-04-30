@@ -1,9 +1,8 @@
 # D:\data_analytics_platform\agents\domain_agent.py
 
-import os
 import json
 import streamlit as st
-from openai import OpenAI
+from utils.llm_client import get_llm_client, LLM_MODEL, is_llm_available
 
 class DomainAgent:
     """
@@ -11,15 +10,8 @@ class DomainAgent:
     """
     
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            try:
-                api_key = st.secrets["OPENAI_API_KEY"]
-            except (KeyError, FileNotFoundError):
-                pass
-                
-        self.available = bool(api_key)
-        self.client = OpenAI(api_key=api_key) if self.available else None
+        self.client = get_llm_client()
+        self.available = self.client is not None
         
     def analyze_context(self, schema: dict, sample_data: list) -> dict:
         """
@@ -63,7 +55,7 @@ class DomainAgent:
         
         try:
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=LLM_MODEL,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
