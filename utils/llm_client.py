@@ -29,14 +29,17 @@ def _resolve_token() -> str | None:
     Never returns the token directly to callers outside this module.
     """
     token = os.getenv("GITHUB_TOKEN")
-    if token:
-        return token
+    if token: return token
+    
+    token = os.getenv("OPENAI_API_KEY")
+    if token: return token
 
     # Fallback: Streamlit Secrets (for Streamlit Cloud deployments)
     try:
-        token = st.secrets["GITHUB_TOKEN"]
-        if token:
-            return token
+        if "GITHUB_TOKEN" in st.secrets:
+            return st.secrets["GITHUB_TOKEN"]
+        if "OPENAI_API_KEY" in st.secrets:
+            return st.secrets["OPENAI_API_KEY"]
     except (KeyError, FileNotFoundError, AttributeError):
         pass
 
