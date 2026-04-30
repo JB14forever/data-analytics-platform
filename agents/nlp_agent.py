@@ -23,15 +23,6 @@ class NLPAgent:
     def query(self, question: str, df: pd.DataFrame, columns: list, domain_context: dict = None) -> dict:
         """
         Translates a natural language question into a full chart specification.
-        
-        Returns:
-            dict with keys:
-                - filter_code: pandas code to produce the data slice
-                - chart_type: one of the supported plotly chart types
-                - chart_config: dict with title, x, y, color, labels, legend_title
-                - figure_description: professional caption for the chart
-                - data_narrative: dataset-driven insight narrative
-                - error: (only on failure)
         """
         if not self.available:
             return {
@@ -43,37 +34,41 @@ class NLPAgent:
                 "error": "LLM API not configured. Natural language queries disabled."
             }
 
-        # Build column context for the LLM
-        dtypes_info = {}
-        stats_info = {}
-        for col in columns:
-            if col not in df.columns:
-                continue
-            dtypes_info[col] = str(df[col].dtype)
-            if pd.api.types.is_numeric_dtype(df[col]):
-                stats_info[col] = {
-                    "min": float(df[col].min()) if not pd.isna(df[col].min()) else None,
-                    "max": float(df[col].max()) if not pd.isna(df[col].max()) else None,
-                    "mean": round(float(df[col].mean()), 2) if not pd.isna(df[col].mean()) else None,
-                    "unique_count": int(df[col].nunique())
-                }
-            else:
-                top_vals = df[col].value_counts().head(8).to_dict()
-                stats_info[col] = {
-                    "unique_count": int(df[col].nunique()),
-                    "top_values": {str(k): int(v) for k, v in top_vals.items()}
-                }
+        try:
+            # Build column context for the LLM
+            dtypes_info = {}
+            stats_info = {}
+            for col in columns:
+                if col not in df.columns:
+                    continue
+                dtypes_info[col] = str(df[col].dtype)
+                try:
+                    if pd.api.types.is_numeric_dtype(df[col]):
+                        stats_info[col] = {
+                            "min": float(df[col].min()) if not pd.isna(df[col].min()) else None,
+                            "max": float(df[col].max()) if not pd.isna(df[col].max()) else None,
+                            "mean": round(float(df[col].mean()), 2) if not pd.isna(df[col].mean()) else None,
+                            "unique_count": int(df[col].nunique())
+                        }
+                    else:
+                        top_vals = df[col].value_counts().head(8).to_dict()
+                        stats_info[col] = {
+                            "unique_count": int(df[col].nunique()),
+                            "top_values": {str(k): int(v) for k, v in top_vals.items()}
+                        }
+                except Exception:
+                    stats_info[col] = {"unique_count": int(df[col].nunique())}
 
-        domain_str = ""
-        if domain_context:
-            domain_str = f"""
-            Domain Context:
-            - Industry: {domain_context.get('industry', 'Unknown')}
-            - Target Variable: {domain_context.get('target_variable', 'Unknown')}
-            - Business Summary: {domain_context.get('business_summary', 'N/A')}
-            """
+            domain_str = ""
+            if domain_context:
+                domain_str = f"""
+                Domain Context:
+                - Industry: {domain_context.get('industry', 'Unknown')}
+                - Target Variable: {domain_context.get('target_variable', 'Unknown')}
+                - Business Summary: {domain_context.get('business_summary', 'N/A')}
+                """
 
-        system_prompt = f"""You are an expert data visualization analyst. The user has a pandas DataFrame `df` with:
+            system_prompt = f"""You are an expert data visualization analyst. The user has a pandas DataFrame `df` with:
 
 COLUMNS AND DTYPES:
 {json.dumps(dtypes_info, indent=2)}
@@ -122,7 +117,6 @@ Respond ONLY with a valid JSON object (no markdown, no backticks):
     "data_narrative": "A 3-5 sentence narrative describing the key insights, patterns, distributions, or comparisons revealed by the data. Focus on actual data values, percentages, trends, and notable observations from the dataset."
 }}"""
 
-        try:
             response = self.client.chat.completions.create(
                 model=LLM_MODEL,
                 messages=[
