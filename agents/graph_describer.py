@@ -5,8 +5,6 @@ Graph Description Agent — Generates contextual chart descriptions using LLM.
 """
 
 import json
-import pandas as pd
-import numpy as np
 from utils.llm_client import get_llm_client, LLM_MODEL
 
 
