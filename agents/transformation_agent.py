@@ -1,6 +1,7 @@
 # D:\data_analytics_platform\agents\transformation_agent.py
 
 import pandas as pd
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 
 class TransformationAgent:
     """
