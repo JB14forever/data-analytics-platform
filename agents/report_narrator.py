@@ -61,7 +61,7 @@ Mention key actions taken and provide descriptive justifications for why they we
             return ""
         lb = json.dumps(ml_results.get('leaderboard', [])[:5], default=str)
         fi = json.dumps(dict(list(ml_results.get('feature_importance', {}).items())[:5]), default=str)
-        prompt = f"""Write a highly descriptive interpretation of ML model results. It MUST be exactly 1 paragraph and no more than 8 sentences maximum.
+        prompt = f"""Write a highly descriptive interpretation of ML model results. It MUST be exactly 1 paragraph and no more than 5 sentences maximum.
 Task: {ml_results.get('task_type','')}. Best: {ml_results.get('best_model_name','')}.
 Metric: {ml_results.get('metric_name','')}: {ml_results.get('best_metric_value',0):.4f}.
 Leaderboard: {lb}
