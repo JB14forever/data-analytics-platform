@@ -368,7 +368,6 @@ def generate_pdf(
                     pdf.ln(3)
                     try:
                         pdf.image(io.BytesIO(q_img), w=160)
-                        pdf.set_y(pdf.get_y() + 115) # Advance Y explicitly past the chart
                     except Exception:
                         pass
 

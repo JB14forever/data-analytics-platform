@@ -501,14 +501,14 @@ else:
                             elif c_t == 'violin': current_fig = pxe.violin(df_v, box=True, points="all", **kwargs)
                             elif c_t == 'pie':
                                 if c_y and c_y in df_v.columns:
-                                    current_fig = pxe.pie(df_v, values=c_y, names=c_x)
+                                    current_fig = pxe.pie(df_v, values=c_y, names=c_x, color_discrete_sequence=kwargs.get('color_discrete_sequence'))
                                 else:
                                     # Fallback for pie without values
                                     counts = df_v[c_x].value_counts().reset_index()
                                     counts.columns = [c_x, 'count']
-                                    current_fig = pxe.pie(counts, values='count', names=c_x)
+                                    current_fig = pxe.pie(counts, values='count', names=c_x, color_discrete_sequence=kwargs.get('color_discrete_sequence'))
                             elif c_t == 'treemap':
-                                current_fig = pxe.treemap(df_v, path=[c_x], values=c_y if c_y in df_v.columns else None)
+                                current_fig = pxe.treemap(df_v, path=[c_x], values=c_y if c_y in df_v.columns else None, color_discrete_sequence=kwargs.get('color_discrete_sequence'))
                             elif c_t == 'area': current_fig = pxe.area(df_v, **kwargs)
                             elif c_t == 'funnel': current_fig = pxe.funnel(df_v, **kwargs)
                             else:
@@ -517,9 +517,9 @@ else:
                                 if df_v.columns[0] in y_fallback:
                                     y_fallback.remove(df_v.columns[0])
                                 if y_fallback:
-                                    current_fig = pxe.bar(df_v, x=df_v.columns[0], y=y_fallback[0])
+                                    current_fig = pxe.bar(df_v, x=df_v.columns[0], y=y_fallback[0], color_discrete_sequence=kwargs.get('color_discrete_sequence'))
                                 else:
-                                    current_fig = pxe.histogram(df_v, x=df_v.columns[0])
+                                    current_fig = pxe.histogram(df_v, x=df_v.columns[0], color_discrete_sequence=kwargs.get('color_discrete_sequence'))
                                 
                             if current_fig:
                                 # Apply titles and labels from LLM
