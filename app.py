@@ -475,6 +475,21 @@ else:
                             if c_color and c_color in df_v.columns: kwargs['color'] = c_color
                             
                             c_t = ct.lower()
+                            
+                            # Fallback to prevent wide-form mixed-type error
+                            if c_t in ['bar', 'line', 'area'] and 'y' not in kwargs:
+                                if c_t == 'bar':
+                                    c_t = 'histogram' # Best equivalent for single-variable count
+                                else:
+                                    # For line/area, try to isolate numeric columns for wide-form
+                                    num_cols = df_v.select_dtypes(include='number').columns.tolist()
+                                    if c_x in num_cols:
+                                        num_cols.remove(c_x)
+                                    if num_cols:
+                                        kwargs['y'] = num_cols
+                                    else:
+                                        c_t = 'histogram'
+                                        
                             if c_t == 'bar': current_fig = pxe.bar(df_v, **kwargs)
                             elif c_t == 'histogram': current_fig = pxe.histogram(df_v, **kwargs)
                             elif c_t == 'line': current_fig = pxe.line(df_v, **kwargs)
@@ -495,7 +510,13 @@ else:
                             elif c_t == 'funnel': current_fig = pxe.funnel(df_v, **kwargs)
                             else:
                                 # Fallback
-                                current_fig = pxe.bar(df_v, x=df_v.columns[0], y=df_v.columns[1] if len(df_v.columns)>1 else None)
+                                y_fallback = df_v.select_dtypes(include='number').columns.tolist()
+                                if df_v.columns[0] in y_fallback:
+                                    y_fallback.remove(df_v.columns[0])
+                                if y_fallback:
+                                    current_fig = pxe.bar(df_v, x=df_v.columns[0], y=y_fallback[0])
+                                else:
+                                    current_fig = pxe.histogram(df_v, x=df_v.columns[0])
                                 
                             if current_fig:
                                 # Apply titles and labels from LLM

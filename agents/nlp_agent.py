@@ -135,6 +135,13 @@ SUPPORTED CHART TYPES
   "bar_3d"     → Grouped bar across two categorical axes with numeric height
 
 ────────────────────────────────────────
+AXIS AND FORMATTING RULES
+────────────────────────────────────────
+- For 'bar', 'line', and 'scatter' charts, ALWAYS specify BOTH 'x' and 'y' in chart_config.
+- If you want to show the frequency/count of a single variable, use 'histogram' (do NOT use 'bar' with a null y).
+- Avoid returning wide-form DataFrames with mixed data types. If comparing multiple metrics, `melt` the DataFrame into long-form first using pandas.
+
+────────────────────────────────────────
 STEP-BY-STEP REASONING (internal — do not include in output)
 ────────────────────────────────────────
 
