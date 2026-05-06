@@ -39,7 +39,7 @@ Return ONLY the title text, no quotes or formatting."""
 
         clean_count = len(cleaning_logs) if isinstance(cleaning_logs, list) else len(cleaning_logs) if isinstance(cleaning_logs, dict) else 0
 
-        prompt = f"""Write a highly detailed executive summary for a data analytics report. It MUST be EXACTLY 18 sentences long, perfectly formatted into exactly 3 paragraphs containing exactly 6 sentences each.
+        prompt = f"""Write a highly detailed executive summary for a data analytics report. It MUST be EXACTLY 12 sentences long, perfectly formatted into exactly 3 paragraphs containing exactly 4 sentences each.
 Dataset: {dataset_name}
 Industry: {domain_context.get('industry','General')}
 Business: {domain_context.get('business_summary','N/A')}
@@ -67,7 +67,7 @@ Metric: {ml_results.get('metric_name','')}: {ml_results.get('best_metric_value',
 Leaderboard: {lb}
 Top Features: {fi}
 Industry: {domain_context.get('industry','General')}, Target: {domain_context.get('target_variable','N/A')}.
-Elaborate deeply on performance, compare the models, and thoroughly discuss why the top features are important. Be very descriptive. Professional tone. No headers. Do not exceed 8 sentences."""
+Elaborate deeply on performance, compare the models, and thoroughly discuss why the top features are important. Be very descriptive. Professional tone. No headers. Do not exceed 5 sentences."""
         return self._call_llm(prompt, "Interpret ML results.")
 
     def generate_conclusions(self, domain_context: dict, ml_results: dict, saved_queries: list) -> str:
