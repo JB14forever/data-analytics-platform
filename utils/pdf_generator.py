@@ -184,6 +184,9 @@ def generate_pdf(
     pdf.set_font("Helvetica", "B", 16)
     pdf.set_text_color(44, 62, 80)
     pdf.cell(0, 12, "Table of Contents", ln=True, align="C")
+    pdf.set_draw_color(52, 152, 219)
+    pdf.set_line_width(0.8)
+    pdf.line(15, pdf.get_y(), 195, pdf.get_y())
     pdf.ln(6)
     
     if _toc_data:
@@ -378,7 +381,8 @@ def generate_pdf(
                 if q_img:
                     pdf.ln(3)
                     try:
-                        pdf.image(io.BytesIO(q_img), x=25, w=160)
+                        pdf.set_x(25)
+                        pdf.image(io.BytesIO(q_img), w=160)
                     except Exception:
                         pass
 
