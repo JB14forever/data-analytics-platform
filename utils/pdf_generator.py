@@ -1,9 +1,6 @@
-# D:\data_analytics_platform\utils\pdf_generator.py
-
 import datetime
 from fpdf import FPDF
 import io
-
 
 def generate_pdf(
     dataset_name: str,
@@ -27,6 +24,8 @@ def generate_pdf(
     raw_row_count: int = 0,
     clean_row_count: int = 0,
     clean_col_count: int = 0,
+    _toc_data=None,
+    _is_second_pass=False,
 ) -> bytes:
     """
     Generates a professional, template-driven A4 PDF analytics report.
@@ -37,6 +36,25 @@ def generate_pdf(
         pipeline_audit_log = []
     if enabled_sections is None:
         enabled_sections = {"profile": True, "cleaning": True, "eda": True, "ml": True, "insights": True, "conclusions": True}
+        
+    if _toc_data is None and not _is_second_pass:
+        # Pass 1: Collect TOC
+        dummy_toc = []
+        generate_pdf(
+            dataset_name, domain_context, cleaning_logs, ml_results, eda_images, saved_queries,
+            report_title, author_name, executive_summary, cleaning_narrative, ml_interpretation,
+            conclusions_text, eda_descriptions, heatmap_description, schema_info, health_score,
+            pipeline_audit_log, enabled_sections, raw_row_count, clean_row_count, clean_col_count,
+            _toc_data=dummy_toc, _is_second_pass=True
+        )
+        # Pass 2: Real run with collected TOC
+        return generate_pdf(
+            dataset_name, domain_context, cleaning_logs, ml_results, eda_images, saved_queries,
+            report_title, author_name, executive_summary, cleaning_narrative, ml_interpretation,
+            conclusions_text, eda_descriptions, heatmap_description, schema_info, health_score,
+            pipeline_audit_log, enabled_sections, raw_row_count, clean_row_count, clean_col_count,
+            _toc_data=dummy_toc, _is_second_pass=True
+        )
 
     final_title = report_title or f"{dataset_name} — Analytical Report"
 
@@ -45,7 +63,7 @@ def generate_pdf(
             if self.page_no() > 1:
                 self.set_font("Helvetica", "I", 8)
                 self.set_text_color(150, 150, 150)
-                self.cell(0, 10, f"{final_title}", border=False, align="R")
+                self.cell(0, 10, "Analytics Report", border=False, align="R")
                 self.ln(10)
 
         def footer(self):
@@ -133,8 +151,6 @@ def generate_pdf(
     left = 50
     pdf.set_x(left)
     label_value("Dataset:", dataset_name)
-    pdf.set_x(left)
-    label_value("Generated:", datetime.datetime.now().strftime("%B %d, %Y - %H:%M"))
     if author_name:
         pdf.set_x(left)
         label_value("Author:", author_name)
@@ -143,6 +159,9 @@ def generate_pdf(
         label_value("Industry:", domain_context.get('industry', 'General'))
         pdf.set_x(left)
         label_value("Target Variable:", domain_context.get('target_variable', 'N/A'))
+        
+    pdf.set_x(left)
+    label_value("Generated:", datetime.datetime.now().strftime("%d %B %Y"))
 
     # Executive Summary
     if executive_summary:
@@ -154,10 +173,28 @@ def generate_pdf(
         body_text(executive_summary)
 
     # ═══════════════════════════════════════════
+    # TABLE OF CONTENTS
+    # ═══════════════════════════════════════════
+    pdf.add_page()
+    section_heading("Table of Contents")
+    
+    if _toc_data:
+        widths = [15, 135, 30]
+        table_header(["Sr. No.", "Section Title", "Page No."], widths)
+        for i, item in enumerate(_toc_data, 1):
+            table_row([str(i), item['title'], str(item['page'])], widths)
+    else:
+        # First pass placeholder to maintain page numbering accuracy
+        pdf.cell(0, 10, "Collecting index data...", ln=True)
+
+    # ═══════════════════════════════════════════
     # SECTION 1: DATA PROFILE & HEALTH
     # ═══════════════════════════════════════════
     if enabled_sections.get("profile", True):
         pdf.add_page()
+        if _toc_data is not None and not _toc_data:
+            _toc_data.append({"title": "1. Data Profile & Health Assessment", "page": pdf.page_no()})
+            
         section_heading("1. Data Profile & Health Assessment")
 
         boilerplate("This section presents the structural profile of the ingested dataset, including data types, completeness metrics, and an algorithmic health assessment. The health score is computed based on missing values, duplicates, and dominant-value prevalence.")
@@ -183,6 +220,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if enabled_sections.get("cleaning", True):
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("2.") for d in _toc_data):
+            _toc_data.append({"title": "2. Data Cleaning Narrative", "page": pdf.page_no()})
+            
         section_heading("2. Data Cleaning Narrative")
 
         boilerplate("The dataset was subjected to a rigorous multi-step cleaning architecture encompassing column standardization, data type correction, duplicate removal, missing value imputation (mean/median/mode based on distribution skewness), IQR-based outlier winsorization, and domain-specific range validation.")
@@ -215,6 +255,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if enabled_sections.get("eda", True):
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("3.") for d in _toc_data):
+            _toc_data.append({"title": "3. Exploratory Data Analysis", "page": pdf.page_no()})
+            
         section_heading("3. Exploratory Data Analysis")
 
         boilerplate("The following visualizations capture the statistical distributions and inter-feature relationships within the cleaned dataset. Each chart is accompanied by an AI-generated analytical description highlighting key patterns, central tendencies, and anomalies relevant to the identified domain.")
@@ -249,6 +292,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if enabled_sections.get("ml", True):
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("4.") for d in _toc_data):
+            _toc_data.append({"title": "4. Predictive Modeling Results", "page": pdf.page_no()})
+            
         section_heading("4. Predictive Modeling Results")
 
         boilerplate("An automated machine learning sweep was conducted across multiple algorithm families including tree-based ensembles, linear models, and support vector machines. Each model was evaluated on a stratified 80/20 train-test split with performance measured using industry-standard metrics.")
@@ -292,6 +338,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if enabled_sections.get("insights", True):
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("5.") for d in _toc_data):
+            _toc_data.append({"title": "5. Natural Language Analyst Insights", "page": pdf.page_no()})
+            
         section_heading("5. Natural Language Analyst Insights")
 
         boilerplate("This section contains insights derived from natural language queries posed against the dataset. Each query was processed by an AI agent that selected the optimal visualization type, generated appropriate chart configurations, and produced contextual data narratives.")
@@ -319,6 +368,7 @@ def generate_pdf(
                     pdf.ln(3)
                     try:
                         pdf.image(io.BytesIO(q_img), w=160)
+                        pdf.set_y(pdf.get_y() + 115) # Advance Y explicitly past the chart
                     except Exception:
                         pass
 
@@ -337,6 +387,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if enabled_sections.get("conclusions", True):
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("6.") for d in _toc_data):
+            _toc_data.append({"title": "6. Conclusions & Recommendations", "page": pdf.page_no()})
+            
         section_heading("6. Conclusions & Recommendations")
 
         boilerplate("The following conclusions are synthesized from the complete analytical pipeline — spanning data profiling, cleaning, exploratory analysis, predictive modeling, and ad-hoc query insights.")
@@ -351,6 +404,9 @@ def generate_pdf(
     # ═══════════════════════════════════════════
     if pipeline_audit_log:
         pdf.add_page()
+        if _toc_data is not None and not any(d['title'].startswith("Appendix") for d in _toc_data):
+            _toc_data.append({"title": "Appendix: Pipeline Execution Audit", "page": pdf.page_no()})
+            
         section_heading("Appendix: Pipeline Execution Audit")
 
         boilerplate("Complete trace of every step executed by the automated pipeline, from initial file ingestion through to model selection.")

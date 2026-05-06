@@ -39,21 +39,21 @@ Return ONLY the title text, no quotes or formatting."""
 
         clean_count = len(cleaning_logs) if isinstance(cleaning_logs, list) else len(cleaning_logs) if isinstance(cleaning_logs, dict) else 0
 
-        prompt = f"""Write a 4-5 sentence executive summary for a data analytics report.
+        prompt = f"""Write a highly detailed executive summary for a data analytics report. It MUST be at least 10-15 sentences (10 lines or more).
 Dataset: {dataset_name}
 Industry: {domain_context.get('industry','General')}
 Business: {domain_context.get('business_summary','N/A')}
 Target: {domain_context.get('target_variable','N/A')}
 Cleaning: {clean_count} columns required intervention.
 {ml_str}
-Professional tone. No headers. Return ONLY the summary text."""
+Include specific figures, important facts, and insights gained during the cleaning and ML sweeping stages about the dataset. Be highly descriptive. Professional tone. No headers. Return ONLY the summary text."""
         return self._call_llm(prompt, "Generate executive summary.")
 
     def generate_cleaning_narrative(self, cleaning_logs) -> str:
         logs_str = json.dumps(cleaning_logs[:10] if isinstance(cleaning_logs, list) else cleaning_logs, default=str)
-        prompt = f"""Write a 3-4 sentence narrative summarizing data cleaning decisions.
+        prompt = f"""Write a highly detailed, 8-10 sentence narrative elaborating on the data cleaning decisions.
 CLEANING LOG: {logs_str}
-Mention key actions taken and their justifications. Professional tone. No headers. Return ONLY text."""
+Mention key actions taken and provide descriptive justifications for why they were necessary. Be highly descriptive. Professional tone. No headers. Return ONLY text."""
         return self._call_llm(prompt, "Summarize cleaning.")
 
     def generate_ml_interpretation(self, ml_results: dict, domain_context: dict) -> str:
@@ -61,13 +61,13 @@ Mention key actions taken and their justifications. Professional tone. No header
             return ""
         lb = json.dumps(ml_results.get('leaderboard', [])[:5], default=str)
         fi = json.dumps(dict(list(ml_results.get('feature_importance', {}).items())[:5]), default=str)
-        prompt = f"""Write a 4-5 sentence interpretation of ML model results.
+        prompt = f"""Write a highly descriptive, 8-10 sentence interpretation of ML model results.
 Task: {ml_results.get('task_type','')}. Best: {ml_results.get('best_model_name','')}.
 Metric: {ml_results.get('metric_name','')}: {ml_results.get('best_metric_value',0):.4f}.
 Leaderboard: {lb}
 Top Features: {fi}
 Industry: {domain_context.get('industry','General')}, Target: {domain_context.get('target_variable','N/A')}.
-Interpret performance, compare models, discuss feature importance. Professional tone. No headers."""
+Elaborate deeply on performance, compare the models, and thoroughly discuss why the top features are important. Be very descriptive. Professional tone. No headers."""
         return self._call_llm(prompt, "Interpret ML results.")
 
     def generate_conclusions(self, domain_context: dict, ml_results: dict, saved_queries: list) -> str:
@@ -75,10 +75,10 @@ Interpret performance, compare models, discuss feature importance. Professional 
         ml_str = ""
         if ml_results and ml_results.get('best_model_name'):
             ml_str = f"Best model: {ml_results['best_model_name']} ({ml_results.get('metric_name','')}: {ml_results.get('best_metric_value',0):.4f})."
-        prompt = f"""Write 4-6 sentences of conclusions and recommendations for a data analytics report.
+        prompt = f"""Write a comprehensive, highly detailed 10-12 sentence conclusion and recommendation section for a data analytics report.
 Industry: {domain_context.get('industry','General')}. Target: {domain_context.get('target_variable','N/A')}.
 Business: {domain_context.get('business_summary','N/A')}. {ml_str}
 Analyst queries explored: {queries}
-Include: key takeaways, actionable recommendations, suggested next steps.
+Include: key takeaways, elaborate actionable recommendations, and suggested next steps. Be very descriptive.
 Professional tone. No headers. Return ONLY text."""
         return self._call_llm(prompt, "Generate conclusions.")

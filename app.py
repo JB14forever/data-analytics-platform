@@ -97,6 +97,7 @@ if run_pipeline_btn and uploaded_file:
         ext = fname.split('.')[-1].lower()
         fmt_label = ext.upper()
         st.session_state['file_format'] = fmt_label
+        st.session_state['dataset_name'] = fname
         audit.append({"#": 1, "Step": "File Upload", "Detail": f"'{fname}' received ({fmt_label} format)", "Status": "✅ Success"})
 
         # Phase 1: Ingestion
@@ -474,6 +475,8 @@ else:
                             if c_y and c_y in df_v.columns: kwargs['y'] = c_y
                             if c_color and c_color in df_v.columns: kwargs['color'] = c_color
                             
+                            kwargs['color_discrete_sequence'] = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4']
+                            
                             c_t = ct.lower()
                             
                             # Fallback to prevent wide-form mixed-type error
@@ -614,7 +617,7 @@ else:
             with st.spinner("AI Agents drafting report narratives... This takes 10-20 seconds."):
                 narrator = ReportNarrator()
                 ctx = st.session_state.get('domain_context', {})
-                dname = "Dataset" if 'raw_df' not in st.session_state else "Analyzed Dataset" # Fallback if no file uploaded yet
+                dname = st.session_state.get('dataset_name', "Analyzed Dataset" if 'raw_df' in st.session_state else "Dataset")
                 
                 # Extract queued EDA descriptions
                 eda_desc = {}
