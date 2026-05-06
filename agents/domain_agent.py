@@ -37,7 +37,7 @@ class DomainAgent:
             "problem_type": "One of: Classification, Regression, Clustering, Time Series, Recommendation, NLP, Computer Vision",
             "target_variable": "The exact name of the column mathematically best suited to be the ML prediction target.",
             "evaluation_metrics": "Select metrics from the rule table based on the problem_type.",
-            "business_summary": "A 2-sentence summary of what this dataset appears to be modeling.",
+            "business_summary": "An elaborate 18-sentence domain context (strictly 3 paragraphs of exactly 6 sentences each) that provides a meaningful and relatable industry context to what this dataset is modeling.",
             "suggested_queries": ["Suggest 1 basic query", "Suggest 1 advanced insight query"]
         }
         

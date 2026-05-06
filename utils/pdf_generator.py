@@ -117,12 +117,17 @@ def generate_pdf(
         pdf.ln()
         pdf.set_text_color(60, 60, 60)
 
-    def table_row(vals, widths):
+    def table_row(vals, widths, aligns=None):
+        if aligns is None:
+            aligns = ["L"] * len(vals)
         pdf.set_font("Helvetica", "", 9)
-        for v, w in zip(vals, widths):
+        for v, w, a in zip(vals, widths, aligns):
             safe = str(v)[:int(w/2)].encode('latin-1', 'replace').decode('latin-1')
-            pdf.cell(w, 7, safe, border=1)
+            pdf.cell(w, 7, safe, border=1, align=a)
         pdf.ln()
+
+    def clean_emojis(text):
+        return text.encode('ascii', 'ignore').decode('ascii')
 
     # ═══════════════════════════════════════════
     # COVER PAGE
@@ -176,13 +181,18 @@ def generate_pdf(
     # TABLE OF CONTENTS
     # ═══════════════════════════════════════════
     pdf.add_page()
-    section_heading("Table of Contents")
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(44, 62, 80)
+    pdf.cell(0, 12, "Table of Contents", ln=True, align="C")
+    pdf.ln(6)
     
     if _toc_data:
+        import re
         widths = [15, 135, 30]
         table_header(["Sr. No.", "Section Title", "Page No."], widths)
         for i, item in enumerate(_toc_data, 1):
-            table_row([str(i), item['title'], str(item['page'])], widths)
+            clean_title = re.sub(r'^\d+\.\s*', '', item['title'])
+            table_row([str(i), clean_title, str(item['page'])], widths, aligns=["C", "L", "C"])
     else:
         # First pass placeholder to maintain page numbering accuracy
         pdf.cell(0, 10, "Collecting index data...", ln=True)
@@ -357,6 +367,7 @@ def generate_pdf(
                 # Figure description
                 fig_desc = sq.get('figure_description', '')
                 if fig_desc:
+                    pdf.set_x(10)
                     pdf.set_font("Helvetica", "I", 9)
                     pdf.set_text_color(80, 80, 80)
                     safe_desc = fig_desc.encode('latin-1', 'replace').decode('latin-1')
@@ -367,7 +378,7 @@ def generate_pdf(
                 if q_img:
                     pdf.ln(3)
                     try:
-                        pdf.image(io.BytesIO(q_img), w=160)
+                        pdf.image(io.BytesIO(q_img), x=25, w=160)
                     except Exception:
                         pass
 
@@ -375,6 +386,7 @@ def generate_pdf(
                 narrative = sq.get('data_narrative', '')
                 if narrative:
                     pdf.ln(3)
+                    pdf.set_x(10)
                     body_text(narrative)
 
                 pdf.ln(8)
@@ -413,7 +425,10 @@ def generate_pdf(
         widths = [12, 55, 90, 23]
         table_header(["#", "Step", "Detail", "Status"], widths)
         for row in pipeline_audit_log:
-            table_row([str(row.get('#', '')), str(row.get('Step', '')), str(row.get('Detail', '')), str(row.get('Status', ''))], widths)
+            step = clean_emojis(str(row.get('Step', '')))
+            detail = clean_emojis(str(row.get('Detail', '')))
+            status = clean_emojis(str(row.get('Status', '')))
+            table_row([str(row.get('#', '')), step, detail, status], widths)
 
     try:
         return bytes(pdf.output())
