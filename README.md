@@ -119,17 +119,3 @@ data_analytics_platform/
     ├── llm_client.py           # Centralized OpenAI/GitHub Models client
     └── pdf_generator.py        # FPDF2 engine with Two-Pass TOC rendering
 ```
-
----
-
-## 📝 Recent Updates & Enhancements
-- **Intelligent Table of Contents:** Implemented a two-pass rendering algorithm in `pdf_generator.py` to calculate exact page numbers for dynamic sections.
-- **Strict Narrative Constraints:** Upgraded `ReportNarrator` and `DomainAgent` prompts to enforce exact sentence counts (e.g., 18 sentences, 3 paragraphs) for incredibly deep, professional reports.
-- **UI & Margin Fixes:** Removed restrictive column layouts from the NLP interface and fixed FPDF X-coordinate margin bleeding to ensure text never overlaps with visual elements.
-- **Codebase Optimization:** Cleaned up unused library imports and stabilized the `requirements.txt` environment.
-
----
-
-<div align="center">
-  <i>Built with ❤️ for enterprise-grade analytics automation.</i>
-</div>
