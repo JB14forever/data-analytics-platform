@@ -61,13 +61,13 @@ Mention key actions taken and provide descriptive justifications for why they we
             return ""
         lb = json.dumps(ml_results.get('leaderboard', [])[:5], default=str)
         fi = json.dumps(dict(list(ml_results.get('feature_importance', {}).items())[:5]), default=str)
-        prompt = f"""Write a highly descriptive interpretation of ML model results. It MUST be exactly 1 paragraph and no more than 4 sentences maximum.
+        prompt = f"""Write a highly descriptive interpretation of ML model results. It MUST be exactly 1 paragraph and no more than 2 sentences maximum.
 Task: {ml_results.get('task_type','')}. Best: {ml_results.get('best_model_name','')}.
 Metric: {ml_results.get('metric_name','')}: {ml_results.get('best_metric_value',0):.4f}.
 Leaderboard: {lb}
 Top Features: {fi}
 Industry: {domain_context.get('industry','General')}, Target: {domain_context.get('target_variable','N/A')}.
-Elaborate deeply on performance, compare the models, and thoroughly discuss why the top features are important. Be very descriptive. Professional tone. No headers. Do not exceed 4 sentences."""
+Elaborate deeply on performance, compare the models, and thoroughly discuss why the top features are important. Be very descriptive. Professional tone. No headers. Do not exceed 3 sentences."""
         return self._call_llm(prompt, "Interpret ML results.")
 
     def generate_conclusions(self, domain_context: dict, ml_results: dict, saved_queries: list) -> str:
